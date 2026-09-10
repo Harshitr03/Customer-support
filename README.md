@@ -106,10 +106,12 @@ pytest -q          # all unit tests, no network (every LLM/embedding call is moc
 
 ## What is committed and why
 
-- `data/golden/` — the hand-labeled golden evaluation set (`golden_eval.csv`)
-  plus labeling notes (`eval/golden_labeling_notes.md`). Labels are
-  LLM-proposed and author-reviewed, not independently hand-labeled from
-  scratch — see "Honest caveats" below.
+- `data/golden/` — the golden evaluation set (`golden_eval.csv`) plus
+  labeling notes and rubric (`eval/golden_labeling_notes.md`). Gold labels
+  were drafted by Claude (an AI assistant) against the written rubric, not
+  independently hand-labeled by a human from scratch, and are reviewed by
+  the author before the evaluation is run — see "Honest caveats" below for
+  the review status and what to spot-check first.
 - `data/kb/` — the retrieval index (embedded vectors + metadata) over the
   first `KB_SIZE` corpus threads. Capped there by the Gemini free-tier
   embedding quota, not by design — it covers a subset of the full corpus,
@@ -204,9 +206,19 @@ To add a human comparison point:
 
 ## Honest caveats
 
-- Golden labels were produced by the author with LLM assistance (keyword
-  pre-labels reviewed and corrected against the taxonomy), not
-  independently hand-labeled by a separate rater.
+- Golden labels (intent, escalation, reason) were drafted by Claude (an AI
+  assistant) reading each message against the written rubric — never
+  against the keyword prefill or any model's own prediction — and are
+  reviewed by the author before the evaluation is run, not independently
+  hand-labeled by a separate human rater. The review record (how many
+  labels the author changed) is kept in `eval/golden_labeling_notes.md`;
+  as of this writing that review has **not yet happened** — treat the gold
+  labels as a single AI labeler's draft until it has. Before trusting the
+  set, spot-check the 65 rows where `gold_escalate` is `True` plus the 101
+  rows where `gold_intent` differs from the keyword prefill (`pre_intent`)
+  — together the rows most likely to carry a labeling mistake, since
+  they're exactly where the gold label disagrees with the cheap mechanical
+  baseline.
 - The LLM judge and the reply generator share the same Gemini model family,
   which can inflate agreement between "the model's own idea of a good
   reply" and "the model's own judgment of a good reply."

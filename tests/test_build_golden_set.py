@@ -86,3 +86,54 @@ def test_golden_labeling_notes_has_author_review_placeholder():
     notes = (Path(__file__).resolve().parents[1] / "eval" / "golden_labeling_notes.md").read_text()
     assert ("The author reviews every row before the evaluation is run; the "
             "number of labels changed will be recorded here.") in notes
+
+
+# ---------------------------------------------------------------------------
+# B4: README.md, eval/golden_labeling_notes.md, and report/DECISION_LOG.md
+# item 4 must describe the SAME labeling process, truthfully -- Claude
+# drafts against the rubric, the author reviews before the eval runs, and
+# the review has not (yet) happened.
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _read(rel_path):
+    return (_REPO_ROOT / rel_path).read_text()
+
+
+def test_labeling_process_described_consistently_across_docs():
+    readme = _read("README.md")
+    notes = _read("eval/golden_labeling_notes.md")
+    log = _read("report/DECISION_LOG.md")
+
+    for doc in (readme, notes, log):
+        assert "Claude" in doc
+        assert "review" in doc.lower()
+
+    # DECISION_LOG item 4 is the one the brief points at specifically.
+    assert "4. **The golden set is sampled with free keyword labels" in log
+
+
+def test_docs_do_not_claim_the_author_review_has_already_happened():
+    readme = _read("README.md")
+    notes = _read("eval/golden_labeling_notes.md")
+    log = _read("report/DECISION_LOG.md")
+
+    # past-tense claims that would assert the review is DONE
+    banned_phrases = ("author-reviewed", "has been reviewed", "was reviewed",
+                       "author has reviewed")
+    for doc, name in ((readme, "README.md"), (notes, "golden_labeling_notes.md"),
+                       (log, "DECISION_LOG.md")):
+        lowered = doc.lower()
+        for phrase in banned_phrases:
+            assert phrase not in lowered, f"{name} claims the review already happened: {phrase!r}"
+
+    # the notes file's own placeholder must still read as not-yet-done
+    assert "will be recorded here" in notes
+
+
+def test_readme_names_the_spotcheck_subset_before_defending_the_set():
+    readme = _read("README.md")
+    assert "65" in readme and "gold_escalate" in readme
+    assert "101" in readme and "pre_intent" in readme

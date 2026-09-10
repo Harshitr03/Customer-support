@@ -2,9 +2,11 @@
 
 Stratification uses the free keyword-rule labeler (`weak_labels.weak_label`), not an
 LLM call, so building the golden set costs no API usage. The resulting `pre_*`
-columns are a prefill only -- the `gold_*` columns are hand-labeled by the author
-afterwards by reading each message against the intent taxonomy and escalation
-rubric (see eval/golden_labeling_notes.md).
+columns are a prefill only -- the `gold_*` columns are drafted afterwards by Claude
+(an AI assistant) reading each message against the intent taxonomy and escalation
+rubric, independent of the pre_* prefill or any model prediction, and are reviewed
+by the author before the evaluation is run (see eval/golden_labeling_notes.md for
+the rubric and the review record).
 """
 import logging
 from pathlib import Path
