@@ -41,6 +41,11 @@ def test_escalation_metrics_reports_confusion_counts_and_accuracy():
     assert m["accuracy"] == pytest.approx(3 / 4)
 
 
+def test_escalation_metrics_reports_escalate_rate():
+    m = run_eval.escalation_metrics([True, False, True, True], [True, True, False, True])
+    assert m["escalate_rate"] == pytest.approx(3 / 4)  # 3 of 4 preds are True
+
+
 # ---------------------------------------------------------------------------
 # bootstrap CI (determinism)
 # ---------------------------------------------------------------------------
@@ -558,6 +563,94 @@ def test_main_full_run_writes_ruling7_outputs(tmp_path, monkeypatch):
     assert (tmp_path / "human_scoring_rubric.md").exists()
     rubric_text = (tmp_path / "human_scoring_rubric.md").read_text()
     assert "1" in rubric_text and "5" in rubric_text
+
+
+# ---------------------------------------------------------------------------
+# B2: escalation baselines (always/never/simple_tfidf) alongside end-to-end
+# and policy-only
+# ---------------------------------------------------------------------------
+
+class _StubSimpleBilling:
+    """Predicts billing_subscription (an ESCALATE_INTENTS member) for any
+    message containing "bill", else "other" -- so decide()'s
+    sensitive_intent rule fires on some rows and not others, giving
+    simple_tfidf a non-trivial escalate_rate to check."""
+    def predict(self, msgs):
+        return ["billing_subscription" if "bill" in m else "other" for m in msgs]
+
+
+def test_main_reports_escalation_baselines(tmp_path, monkeypatch):
+    n, n_spotcheck, n_extra = 6, 2, 1
+    golden = _fake_golden(n=n, n_spotcheck=n_spotcheck)
+    # half the messages mention "bill" -> simple_tfidf predicts
+    # billing_subscription for those (an ESCALATE_INTENTS member), "other"
+    # for the rest.
+    for i in range(0, n, 2):
+        golden.loc[i, "message"] = f"billing question {i}"
+    # gold_escalate: mixed, not all-False (the _fake_golden default), so
+    # always/never aren't both trivially "matches everything"/"matches
+    # nothing" in a degenerate way.
+    golden.loc[0, "gold_escalate"] = True
+    golden.loc[1, "gold_escalate"] = True
+
+    eval_df = pd.DataFrame({
+        "root_id": golden["root_id"],
+        "spotify_reply": [f"real reply {i}" for i in range(n)],
+    })
+    corpus = pd.DataFrame({"customer_open": ["a", "b", "c"]})
+
+    monkeypatch.setattr(run_eval, "load_golden", lambda: golden)
+    monkeypatch.setattr(run_eval.data_prep, "load_pools", lambda: (corpus, eval_df))
+    monkeypatch.setattr(run_eval, "N_EXTRA_NONSPOTCHECK", n_extra)
+    monkeypatch.setattr(run_eval.weak_labels, "weak_label", lambda t: "other")
+    monkeypatch.setattr(run_eval.classify, "llm_classify", _stub_llm_classify)
+    monkeypatch.setattr(run_eval.classify.SimpleClassifier, "from_weak_corpus",
+                        classmethod(lambda cls: _StubSimpleBilling()))
+    monkeypatch.setattr(run_eval.draft_reply, "trivial_reply", lambda intent: f"trivial:{intent}")
+    monkeypatch.setattr(run_eval.draft_reply, "nearest_reply", lambda msg: f"nearest:{msg}")
+    monkeypatch.setattr(run_eval.draft_reply, "grounded_reply", lambda msg, intent: f"grounded:{intent}:{msg}")
+    monkeypatch.setattr(run_eval.llm_client, "embed",
+                        lambda texts: np.zeros((len(texts), 8), dtype=np.float32))
+    monkeypatch.setattr(run_eval, "judge_reply",
+                        lambda message, reply, reference: {"grounded": 4, "factual": 4, "tone": 4,
+                                                            "actionable": 4, "overall": 4,
+                                                            "parse_ok": True})
+    monkeypatch.setattr(run_eval.config, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(run_eval, "N_BOOTSTRAP", 5)
+
+    result = run_eval.main(estimate_only=False)
+    esc = result["escalation"]
+
+    assert set(esc.keys()) >= {"end_to_end", "policy_only", "always_escalate",
+                                "never_escalate", "simple_tfidf"}
+
+    # always_escalate predicts True for every row -> escalate_rate 1.0,
+    # recall 1.0 (every gold-True row is caught).
+    assert esc["always_escalate"]["escalate_rate"] == pytest.approx(1.0)
+    assert esc["always_escalate"]["recall"] == pytest.approx(1.0)
+
+    # never_escalate predicts False for every row -> escalate_rate 0.0,
+    # recall 0.0 (catches none of the gold-True rows).
+    assert esc["never_escalate"]["escalate_rate"] == pytest.approx(0.0)
+    assert esc["never_escalate"]["recall"] == pytest.approx(0.0)
+
+    # simple_tfidf: half the messages are billing (predicted
+    # billing_subscription, an ESCALATE_INTENTS member) -> escalate_rate
+    # is exactly the billing share (3 of 6 golden rows).
+    assert esc["simple_tfidf"]["escalate_rate"] == pytest.approx(0.5)
+
+    # gold escalation rate is reported too: 2 of 6 rows are gold_escalate=True.
+    assert esc["gold_escalate_rate"] == pytest.approx(2 / 6)
+
+    # keep existing end-to-end precision/recall/accuracy/counts + CIs.
+    for key in ("precision", "recall", "accuracy", "tp", "fp", "fn", "tn"):
+        assert key in esc["end_to_end"]
+    assert "end_to_end" in result["bootstrap_ci"]["escalation_precision"]
+    assert "end_to_end" in result["bootstrap_ci"]["escalation_recall"]
+
+    # note explaining confidence=1.0 disables the low-confidence rule.
+    note = result["metadata"]["escalation_baselines_note"].lower()
+    assert "confidence" in note and "1.0" in note
 
 
 # ---------------------------------------------------------------------------

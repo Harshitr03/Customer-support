@@ -85,6 +85,10 @@ def escalation_metrics(y_true, y_pred) -> dict:
         "recall": float(recall_score(y_true, y_pred, zero_division=0)),
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+        # B2: share of rows this variant escalates -- lets always_escalate
+        # (rate 1.0) and never_escalate (rate 0.0) be compared to the
+        # actual/gold rate at a glance, alongside precision/recall.
+        "escalate_rate": float(np.mean(y_pred)) if y_pred else float("nan"),
     }
 
 
@@ -451,13 +455,20 @@ def _print_table(r: dict) -> None:
         ci = r["bootstrap_ci"]["reply_overall"][k]
         print(f"  {k:10s} overall={v['overall']:.2f} [{ci['lo']:.2f},{ci['hi']:.2f}]")
     print("\n=== Escalation ===")
+    print(f"  gold escalate_rate = {r['escalation']['gold_escalate_rate']:.3f}")
     for variant in ("end_to_end", "policy_only"):
         e = r["escalation"][variant]
         cip = r["bootstrap_ci"]["escalation_precision"][variant]
         cir = r["bootstrap_ci"]["escalation_recall"][variant]
-        print(f"  {variant:12s} precision={e['precision']:.3f} [{cip['lo']:.3f},{cip['hi']:.3f}]  "
+        print(f"  {variant:14s} precision={e['precision']:.3f} [{cip['lo']:.3f},{cip['hi']:.3f}]  "
               f"recall={e['recall']:.3f} [{cir['lo']:.3f},{cir['hi']:.3f}]  "
-              f"acc={e['accuracy']:.3f}  tp={e['tp']} fp={e['fp']} fn={e['fn']} tn={e['tn']}")
+              f"acc={e['accuracy']:.3f}  rate={e['escalate_rate']:.3f}  "
+              f"tp={e['tp']} fp={e['fp']} fn={e['fn']} tn={e['tn']}")
+    print("  --- baselines (no bootstrap CI) ---")
+    for variant in ("always_escalate", "never_escalate", "simple_tfidf"):
+        e = r["escalation"][variant]
+        print(f"  {variant:14s} precision={e['precision']:.3f}  recall={e['recall']:.3f}  "
+              f"acc={e['accuracy']:.3f}  rate={e['escalate_rate']:.3f}")
 
 
 def main(estimate_only: bool = False) -> dict:
@@ -502,18 +513,33 @@ def main(estimate_only: bool = False) -> dict:
                 classification["trivial"]["accuracy"], classification["simple_tfidf"]["accuracy"],
                 classification["llm"]["accuracy"])
 
-    # --- escalation, twice (ruling 6) ------------------------------------
+    # --- escalation, twice (ruling 6) plus baselines (B2) ------------------
     gold_escalate = golden["gold_escalate"].astype(bool).tolist()
     e2e_pred, e2e_reason = compute_escalation_variant(golden, pred_intents, pred_confs)
     policy_pred, policy_reason = compute_escalation_variant(
         golden, y_true, [1.0] * len(golden))
+    # B2: trivial baselines (no model at all) and a simple_tfidf variant
+    # (decide() fed the cheap TF-IDF classifier's prediction, confidence
+    # pinned to 1.0 -- mirrors policy_only's confidence handling) so
+    # end-to-end's precision/recall/rate has something to be better than.
+    always_pred = [True] * len(golden)
+    never_pred = [False] * len(golden)
+    simple_tfidf_pred, simple_tfidf_reason = compute_escalation_variant(
+        golden, simple_preds, [1.0] * len(golden))
     escalation = {
         "end_to_end": escalation_metrics(gold_escalate, e2e_pred),
         "policy_only": escalation_metrics(gold_escalate, policy_pred),
+        "always_escalate": escalation_metrics(gold_escalate, always_pred),
+        "never_escalate": escalation_metrics(gold_escalate, never_pred),
+        "simple_tfidf": escalation_metrics(gold_escalate, simple_tfidf_pred),
+        "gold_escalate_rate": float(np.mean(gold_escalate)),
     }
-    logger.info("escalation: end_to_end precision=%.3f recall=%.3f | policy_only precision=%.3f recall=%.3f",
+    logger.info("escalation: end_to_end precision=%.3f recall=%.3f | policy_only precision=%.3f recall=%.3f "
+                "| gold_rate=%.3f always_rate=%.3f never_rate=%.3f simple_tfidf_rate=%.3f",
                 escalation["end_to_end"]["precision"], escalation["end_to_end"]["recall"],
-                escalation["policy_only"]["precision"], escalation["policy_only"]["recall"])
+                escalation["policy_only"]["precision"], escalation["policy_only"]["recall"],
+                escalation["gold_escalate_rate"], escalation["always_escalate"]["escalate_rate"],
+                escalation["never_escalate"]["escalate_rate"], escalation["simple_tfidf"]["escalate_rate"])
 
     # --- reply-quality subset (ruling 3, 4) -------------------------------
     subset = select_reply_subset(golden)
@@ -639,6 +665,16 @@ def main(estimate_only: bool = False) -> dict:
             "are computed over parse_ok rows only; a parse failure's "
             "clamped fallback scores (all 3s) are written to reply_rows.csv "
             "but excluded from both."
+        ),
+        "escalation_baselines_note": (
+            "policy_only and simple_tfidf both call decide() with "
+            "confidence pinned to 1.0, which disables decide()'s "
+            "low-confidence escalation rule entirely (1.0 is never below "
+            "CONF_THRESHOLD). So end_to_end minus policy_only isn't purely "
+            "'what the low-confidence rule adds' -- it mixes that rule's "
+            "effect with ordinary classifier error (end_to_end uses the "
+            "LLM's own predicted intent and confidence, which can differ "
+            "from gold_intent even before the confidence rule ever fires)."
         ),
     }
 
