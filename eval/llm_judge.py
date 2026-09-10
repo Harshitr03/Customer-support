@@ -42,23 +42,40 @@ integer 1-5."""
 
 
 def judge_reply(message: str, reply: str, reference: str) -> dict:
+    """Score `reply` on JUDGE_KEYS, 1-5 each, plus a `parse_ok` flag: False
+    when the judge's JSON response failed to parse, wasn't an object, or
+    was missing/had a non-numeric value for any required key -- in every
+    one of those cases the affected score(s) still fall back to a clamped
+    default (3) rather than raising, but `parse_ok` tells the caller not to
+    trust that row's numbers for aggregate stats (A6)."""
     raw = llm_client.generate(
         _RUBRIC.format(reference=reference, message=message, reply=reply),
         json_mode=True, temperature=0.0)
+    parse_ok = True
     try:
         obj = json.loads(raw)
     except json.JSONDecodeError:
         logger.warning("judge_reply: unparseable JSON response from judge")
         obj = {}
+        parse_ok = False
     if not isinstance(obj, dict):
         logger.warning("judge_reply: judge response was not a JSON object")
         obj = {}
+        parse_ok = False
     out = {}
     for k in JUDGE_KEYS:
-        try:
-            v = int(round(float(obj.get(k, 3))))
-        except (ValueError, TypeError):
+        if k not in obj:
+            parse_ok = False
             v = 3
+        else:
+            try:
+                if isinstance(obj[k], bool):
+                    raise TypeError
+                v = int(round(float(obj[k])))
+            except (ValueError, TypeError):
+                parse_ok = False
+                v = 3
         out[k] = max(1, min(5, v))
-    logger.debug("judge_reply: scores=%s", out)
+    out["parse_ok"] = parse_ok
+    logger.debug("judge_reply: scores=%s parse_ok=%s", out, parse_ok)
     return out

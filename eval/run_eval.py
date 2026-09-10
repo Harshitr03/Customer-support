@@ -439,23 +439,39 @@ def main(estimate_only: bool = False) -> dict:
 
     t2 = time.monotonic()
     reply_rows_recs = []
+    # A6: judge_reply's `parse_ok` flag marks rows whose judge response
+    # failed to parse (or was missing/non-numeric on some key) -- those
+    # still get clamped fallback scores (so nothing crashes downstream) but
+    # must not pollute the reported means/CIs, so they're tracked alongside
+    # the raw scores and filtered out below.
     judge_scores_by_system = {s: [] for s in REPLY_SYSTEMS}
     for system in REPLY_SYSTEMS:
         for row, pi, reply in zip(subset.itertuples(), sub_pred_intents, replies_by_system[system]):
             reference = reference_map[row.root_id]
             scores = judge_reply(row.message, reply, reference)
-            logger.debug("judge: root_id=%s system=%s scores=%s", row.root_id, system, scores)
-            judge_scores_by_system[system].append(scores)
+            parse_ok = bool(scores.get("parse_ok", True))
+            logger.debug("judge: root_id=%s system=%s scores=%s parse_ok=%s",
+                         row.root_id, system, scores, parse_ok)
+            judge_scores_by_system[system].append({**scores, "parse_ok": parse_ok})
             reply_rows_recs.append({
                 "root_id": row.root_id, "message": row.message, "system": system,
                 "pred_intent": pi, "reply": reply, "reference": reference,
-                **scores,
+                **{k: scores[k] for k in JUDGE_KEYS},
+                "judge_parse_ok": parse_ok,
             })
     logger.info("judged %d (row, system) pairs in %.1fs", len(reply_rows_recs), time.monotonic() - t2)
     reply_rows = pd.DataFrame(reply_rows_recs)
 
+    valid_scores_by_system = {
+        system: [s for s in judge_scores_by_system[system] if s["parse_ok"]]
+        for system in REPLY_SYSTEMS
+    }
+    judge_parse_failures = {
+        system: len(judge_scores_by_system[system]) - len(valid_scores_by_system[system])
+        for system in REPLY_SYSTEMS
+    }
     reply_quality = {
-        system: {k: float(np.mean([s[k] for s in judge_scores_by_system[system]])) for k in JUDGE_KEYS}
+        system: {k: float(np.mean([s[k] for s in valid_scores_by_system[system]])) for k in JUDGE_KEYS}
         for system in REPLY_SYSTEMS
     }
 
@@ -486,10 +502,12 @@ def main(estimate_only: bool = False) -> dict:
         "classification_macro_f1": {
             k: bootstrap_ci(f1_stat(v), n_golden) for k, v in pred_arrs.items()},
         "reply_overall": {
+            # A6: resampled over parse_ok rows only, so a parse failure's
+            # clamped fallback score can't bias the CI either.
             system: bootstrap_ci(
                 lambda idx, s=system: float(np.mean(
-                    [judge_scores_by_system[s][i]["overall"] for i in idx])),
-                len(subset))
+                    [valid_scores_by_system[s][i]["overall"] for i in idx])),
+                len(valid_scores_by_system[system]))
             for system in REPLY_SYSTEMS},
         "escalation_precision": {
             "end_to_end": bootstrap_ci(escalation_stat(e2e_pred_arr, "precision"), n_golden),
@@ -511,6 +529,17 @@ def main(estimate_only: bool = False) -> dict:
         "seed": config.SEED,
         "bootstrap_n": N_BOOTSTRAP,
         "bootstrap_seed": BOOTSTRAP_SEED,
+        "judge_parse_failures": judge_parse_failures,
+        "judge_stats_note": (
+            "judge_parse_failures counts, per system, how many of the "
+            "n_reply_subset judge calls had a judge_parse_ok=False response "
+            "(unparseable JSON, a missing key, or a non-numeric value) -- "
+            "see reply_rows.csv's judge_parse_ok column for which rows. "
+            "reply_quality means and the reply_overall bootstrap CIs above "
+            "are computed over parse_ok rows only; a parse failure's "
+            "clamped fallback scores (all 3s) are written to reply_rows.csv "
+            "but excluded from both."
+        ),
     }
 
     results = {

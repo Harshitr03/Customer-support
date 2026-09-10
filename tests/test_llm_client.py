@@ -427,6 +427,35 @@ def test_touched_cache_files_records_writes_and_hits(tmp_path, monkeypatch):
     assert set(lc.touched_cache_files()) == touched_after_write
 
 
+def test_generate_does_not_cache_empty_response(tmp_path, monkeypatch, caplog):
+    """A6: an empty or whitespace-only generate() response must never be
+    written to disk -- caching it would make every future call for that
+    same prompt replay the empty string forever instead of retrying."""
+    monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(lc, "_raw_generate", lambda *a, **k: "   ")
+
+    with caplog.at_level("WARNING", logger=lc.logger.name):
+        result = lc.generate("hi")
+
+    assert result == "   "
+    assert any(r.levelname == "WARNING" for r in caplog.records)
+    assert list(tmp_path.iterdir()) == []  # nothing written to CACHE_DIR
+
+
+def test_generate_empty_response_is_retried_on_next_call(tmp_path, monkeypatch):
+    monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path)
+    calls = {"n": 0}
+
+    def fake_raw(*a, **k):
+        calls["n"] += 1
+        return "" if calls["n"] == 1 else "real text"
+
+    monkeypatch.setattr(lc, "_raw_generate", fake_raw)
+    assert lc.generate("hi") == ""
+    assert lc.generate("hi") == "real text"  # not served from a bogus empty cache entry
+    assert calls["n"] == 2
+
+
 def test_generate_ignores_replay_cache_when_no_replay_env_set(tmp_path, monkeypatch):
     """A5: SUPPORT_AGENT_NO_REPLAY=1 must disable the replay-cache lookup so
     --live --no-replay genuinely calls the network for anything not in the

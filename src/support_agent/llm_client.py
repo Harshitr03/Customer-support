@@ -276,6 +276,12 @@ def generate(prompt: str, *, json_mode: bool = False, temperature: float = 0.2,
         return json.loads(replay_path.read_text())["text"]
     logger.debug("generate: cache miss (model=%s)", model)
     text = _raw_generate(prompt, temperature, model, json_mode)
+    if not text.strip():
+        # Never persist an empty/whitespace-only response: caching it would
+        # make every future call for this exact prompt replay the empty
+        # string forever instead of getting a real retry.
+        logger.warning("generate: empty response from model (model=%s), not caching", model)
+        return text
     path.write_text(json.dumps({"text": text}))
     _touched_files.add(path.name)
     return text

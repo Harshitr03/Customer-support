@@ -44,6 +44,45 @@ def test_judge_handles_non_numeric_value(monkeypatch):
     assert s["grounded"] == 3   # non-numeric falls back to default
 
 
+# --- A6: parse_ok flag -----------------------------------------------------
+
+def test_judge_reports_parse_ok_true_on_valid_json(monkeypatch):
+    monkeypatch.setattr(llm_judge.llm_client, "generate",
+        lambda *a, **k: '{"grounded":4,"factual":4,"tone":5,"actionable":3,"overall":4}')
+    s = llm_judge.judge_reply("m", "r", "ref")
+    assert s["parse_ok"] is True
+
+
+def test_judge_reports_parse_ok_false_on_unparseable_json(monkeypatch):
+    monkeypatch.setattr(llm_judge.llm_client, "generate", lambda *a, **k: "not json at all")
+    s = llm_judge.judge_reply("m", "r", "ref")
+    assert s["parse_ok"] is False
+    assert all(s[k] == 3 for k in llm_judge.JUDGE_KEYS)  # fallback values still clamped
+
+
+def test_judge_reports_parse_ok_false_on_non_dict_json(monkeypatch):
+    monkeypatch.setattr(llm_judge.llm_client, "generate", lambda *a, **k: "[1,2,3]")
+    s = llm_judge.judge_reply("m", "r", "ref")
+    assert s["parse_ok"] is False
+
+
+def test_judge_reports_parse_ok_false_on_missing_key(monkeypatch):
+    monkeypatch.setattr(llm_judge.llm_client, "generate",
+        lambda *a, **k: '{"overall": 4}')
+    s = llm_judge.judge_reply("m", "r", "ref")
+    assert s["parse_ok"] is False
+    assert s["overall"] == 4       # present key is kept as-is
+    assert s["grounded"] == 3      # missing key still falls back, clamped
+
+
+def test_judge_reports_parse_ok_false_on_non_numeric_value(monkeypatch):
+    monkeypatch.setattr(llm_judge.llm_client, "generate",
+        lambda *a, **k: '{"grounded":"n/a","factual":4,"tone":5,"actionable":3,"overall":4}')
+    s = llm_judge.judge_reply("m", "r", "ref")
+    assert s["parse_ok"] is False
+    assert s["grounded"] == 3  # fallback
+
+
 def test_judge_prompt_describes_reference_as_guide_not_answer_key():
     """Controller ruling 2: the judge prompt must frame the reference as a
     real historical reply used as a guide, not an answer key to copy, and

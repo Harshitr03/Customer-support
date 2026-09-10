@@ -371,7 +371,8 @@ def test_main_full_run_writes_ruling7_outputs(tmp_path, monkeypatch):
                         lambda texts: np.zeros((len(texts), 8), dtype=np.float32))
     monkeypatch.setattr(run_eval, "judge_reply",
                         lambda message, reply, reference: {"grounded": 4, "factual": 4, "tone": 4,
-                                                            "actionable": 4, "overall": 4})
+                                                            "actionable": 4, "overall": 4,
+                                                            "parse_ok": True})
     monkeypatch.setattr(run_eval.config, "RESULTS_DIR", tmp_path)
     monkeypatch.setattr(run_eval, "N_BOOTSTRAP", 20)  # keep the test fast
 
@@ -455,7 +456,8 @@ def test_main_batches_subset_embeddings_in_one_call_before_drafting(tmp_path, mo
     monkeypatch.setattr(run_eval.draft_reply, "grounded_reply", fake_grounded)
     monkeypatch.setattr(run_eval, "judge_reply",
                         lambda message, reply, reference: {"grounded": 4, "factual": 4, "tone": 4,
-                                                            "actionable": 4, "overall": 4})
+                                                            "actionable": 4, "overall": 4,
+                                                            "parse_ok": True})
     monkeypatch.setattr(run_eval.config, "RESULTS_DIR", tmp_path)
     monkeypatch.setattr(run_eval, "N_BOOTSTRAP", 5)
 
@@ -471,3 +473,66 @@ def test_main_batches_subset_embeddings_in_one_call_before_drafting(tmp_path, mo
     first_draft_idx = min(i for i, c in enumerate(calls) if c[0] in ("trivial", "nearest", "grounded"))
     embed_idx = next(i for i, c in enumerate(calls) if c[0] == "embed")
     assert embed_idx < first_draft_idx
+
+
+# ---------------------------------------------------------------------------
+# A6: judge parse-failure tracking (judge_parse_ok column, metadata counts,
+# means/CIs computed over parse_ok rows only)
+# ---------------------------------------------------------------------------
+
+def test_main_reports_judge_parse_failures_and_excludes_from_stats(tmp_path, monkeypatch):
+    n, n_spotcheck, n_extra = 4, 2, 1  # reply subset = 3 rows x 3 systems = 9 judge calls
+    golden = _fake_golden(n=n, n_spotcheck=n_spotcheck)
+    eval_df = pd.DataFrame({
+        "root_id": golden["root_id"],
+        "spotify_reply": [f"real reply {i}" for i in range(n)],
+    })
+    corpus = pd.DataFrame({"customer_open": ["a", "b", "c"]})
+
+    monkeypatch.setattr(run_eval, "load_golden", lambda: golden)
+    monkeypatch.setattr(run_eval.data_prep, "load_pools", lambda: (corpus, eval_df))
+    monkeypatch.setattr(run_eval, "N_EXTRA_NONSPOTCHECK", n_extra)
+    monkeypatch.setattr(run_eval.weak_labels, "weak_label", lambda t: "other")
+    monkeypatch.setattr(run_eval.classify, "llm_classify", _stub_llm_classify)
+    monkeypatch.setattr(run_eval.classify.SimpleClassifier, "from_weak_corpus",
+                        classmethod(lambda cls: _StubSimple()))
+    monkeypatch.setattr(run_eval.draft_reply, "trivial_reply", lambda intent: f"trivial:{intent}")
+    monkeypatch.setattr(run_eval.draft_reply, "nearest_reply", lambda msg: f"nearest:{msg}")
+    monkeypatch.setattr(run_eval.draft_reply, "grounded_reply", lambda msg, intent: f"grounded:{intent}:{msg}")
+    monkeypatch.setattr(run_eval.llm_client, "embed",
+                        lambda texts: np.zeros((len(texts), 8), dtype=np.float32))
+
+    # main() judges system-major: all n_subset rows for "trivial", then all
+    # for "nearest", then all for "grounded". Fail parse for the first row
+    # of each system's block (score 3, arbitrary), succeed for the rest
+    # (score 5) so the excluded-vs-included means are clearly distinguishable.
+    n_subset = n_spotcheck + n_extra
+    call_counter = {"n": 0}
+
+    def fake_judge(message, reply, reference):
+        i = call_counter["n"]
+        call_counter["n"] += 1
+        if i % n_subset == 0:
+            return {"grounded": 3, "factual": 3, "tone": 3, "actionable": 3, "overall": 3,
+                    "parse_ok": False}
+        return {"grounded": 5, "factual": 5, "tone": 5, "actionable": 5, "overall": 5,
+                "parse_ok": True}
+
+    monkeypatch.setattr(run_eval, "judge_reply", fake_judge)
+    monkeypatch.setattr(run_eval.config, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(run_eval, "N_BOOTSTRAP", 20)
+
+    result = run_eval.main(estimate_only=False)
+
+    # one parse failure per system (the first row of each system's block)
+    assert result["metadata"]["judge_parse_failures"] == {"trivial": 1, "nearest": 1, "grounded": 1}
+    assert "parse_ok" in result["metadata"]["judge_stats_note"].lower()
+
+    # reply_quality means must exclude the failed (score=3) row -> mean of
+    # the remaining parse_ok rows, all scored 5, is exactly 5.0
+    for system in run_eval.REPLY_SYSTEMS:
+        assert result["reply_quality"][system]["overall"] == pytest.approx(5.0)
+
+    rrows = pd.read_csv(tmp_path / "reply_rows.csv")
+    assert "judge_parse_ok" in rrows.columns
+    assert int((~rrows["judge_parse_ok"]).sum()) == 3  # one failure per system, 3 systems
