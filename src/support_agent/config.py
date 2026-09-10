@@ -30,6 +30,12 @@ DATA_DIR = ROOT / "data"
 RAW_CSV = DATA_DIR / "raw" / "twcs" / "twcs.csv"
 INTERIM_DIR = DATA_DIR / "interim"
 CACHE_DIR = DATA_DIR / "cache"
+# Committed, read-only replay cache: the exact LLM/embedding responses
+# behind the reported headline numbers, so graders can reproduce them
+# offline with zero API calls (see llm_client's replay fallback and
+# scripts/run_demo.py). Never written to by generate()/embed() -- only by
+# llm_client.export_touched_cache(), under `run_demo.py --live --export-cache`.
+REPLAY_CACHE_DIR = DATA_DIR / "llm_cache"
 KB_DIR = DATA_DIR / "kb"
 GOLDEN_DIR = DATA_DIR / "golden"
 # Committed eval-harness outputs (Task 11). NOT included in ensure_dirs()'s

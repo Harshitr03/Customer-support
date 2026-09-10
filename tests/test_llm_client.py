@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 
@@ -12,6 +14,21 @@ def _no_embed_pacing(monkeypatch):
     affected by state another test left behind."""
     monkeypatch.setattr(lc.config, "EMBED_BATCH_INTERVAL_S", 0.0)
     monkeypatch.setattr(lc, "_last_embed_batch_at", None)
+
+
+@pytest.fixture(autouse=True)
+def _reset_touched_files(monkeypatch):
+    """Task 13: touched_cache_files() is a module-level set; don't let one
+    test's reads/writes bleed into the next."""
+    monkeypatch.setattr(lc, "_touched_files", set())
+
+
+@pytest.fixture(autouse=True)
+def _offline_env_isolated(monkeypatch):
+    """Task 13: SUPPORT_AGENT_OFFLINE must never leak between tests. Start
+    every test with it unset; monkeypatch restores whatever it was
+    (including unset) after the test regardless of what ran in between."""
+    monkeypatch.delenv("SUPPORT_AGENT_OFFLINE", raising=False)
 
 
 def test_generate_caches(tmp_path, monkeypatch):
@@ -239,3 +256,119 @@ def test_embed_fully_cached_call_never_paces(tmp_path, monkeypatch):
     monkeypatch.setattr(lc.time, "sleep", lambda s: sleeps.append(s))
     lc.embed(["x", "y"])  # fully cached: no _raw_embed call, no pacing wait
     assert sleeps == []
+
+
+# ---------------------------------------------------------------------------
+# Task 13: replay cache, offline guard, touched-files tracking, export
+# ---------------------------------------------------------------------------
+
+def test_generate_replay_fallback_no_network_and_replay_readonly(tmp_path, monkeypatch):
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    cache_dir.mkdir()
+    replay_dir.mkdir()
+    monkeypatch.setattr(lc.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
+
+    key = json.dumps({"m": lc.config.GEN_MODEL, "p": "hi", "t": 0.2, "j": False})
+    path = lc._cache_path("gen", key)
+    (replay_dir / path.name).write_text(json.dumps({"text": "replayed"}))
+
+    def fail_raw(*a, **k):
+        raise AssertionError("must not call the network on a replay hit")
+
+    monkeypatch.setattr(lc, "_raw_generate", fail_raw)
+
+    before = set(p.name for p in replay_dir.iterdir())
+    assert lc.generate("hi") == "replayed"
+    assert set(p.name for p in replay_dir.iterdir()) == before  # replay dir untouched
+    assert not path.exists()  # nothing written into CACHE_DIR either
+
+
+def test_embed_replay_fallback_no_network(tmp_path, monkeypatch):
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    cache_dir.mkdir()
+    replay_dir.mkdir()
+    monkeypatch.setattr(lc.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
+
+    key = lc._embed_cache_key("hello")
+    path = lc._cache_path("emb", key)
+    (replay_dir / path.name).write_text(json.dumps([1.0, 2.0, 3.0]))
+
+    def fail_raw(texts):
+        raise AssertionError("must not call the network on a replay hit")
+
+    monkeypatch.setattr(lc, "_raw_embed", fail_raw)
+
+    vecs = lc.embed(["hello"])
+    assert np.allclose(vecs[0], [1.0, 2.0, 3.0])
+    assert not path.exists()
+
+
+def test_generate_offline_guard_raises_clear_runtime_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", tmp_path / "replay")
+    monkeypatch.setenv("SUPPORT_AGENT_OFFLINE", "1")
+    with pytest.raises(RuntimeError, match="offline mode"):
+        lc.generate("uncached prompt")
+
+
+def test_embed_offline_guard_raises_clear_runtime_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", tmp_path / "replay")
+    monkeypatch.setenv("SUPPORT_AGENT_OFFLINE", "1")
+    with pytest.raises(RuntimeError, match="offline mode"):
+        lc.embed(["uncached text"])
+
+
+def test_offline_guard_does_not_block_cache_hits(tmp_path, monkeypatch):
+    """Offline mode only guards the network fallback -- a value already in
+    CACHE_DIR or REPLAY_CACHE_DIR must still be served."""
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    cache_dir.mkdir()
+    replay_dir.mkdir()
+    monkeypatch.setattr(lc.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
+
+    key = json.dumps({"m": lc.config.GEN_MODEL, "p": "hi", "t": 0.2, "j": False})
+    path = lc._cache_path("gen", key)
+    (replay_dir / path.name).write_text(json.dumps({"text": "replayed"}))
+
+    monkeypatch.setenv("SUPPORT_AGENT_OFFLINE", "1")
+    assert lc.generate("hi") == "replayed"
+
+
+def test_touched_cache_files_records_writes_and_hits(tmp_path, monkeypatch):
+    monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", tmp_path / "replay")
+    monkeypatch.setattr(lc, "_raw_generate", lambda *a, **k: "hello")
+
+    assert lc.touched_cache_files() == []
+    lc.generate("hi")  # cache miss -> write
+    touched_after_write = set(lc.touched_cache_files())
+    assert len(touched_after_write) == 1
+
+    monkeypatch.setattr(lc, "_touched_files", set())  # simulate a fresh process
+    lc.generate("hi")  # now a cache hit
+    assert set(lc.touched_cache_files()) == touched_after_write
+
+
+def test_export_touched_cache_copies_and_skips_existing(tmp_path, monkeypatch):
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    cache_dir.mkdir()
+    replay_dir.mkdir()
+    monkeypatch.setattr(lc.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
+
+    (cache_dir / "gen_aaa.json").write_text('{"text": "a"}')
+    (cache_dir / "gen_bbb.json").write_text('{"text": "b"}')
+    (replay_dir / "gen_bbb.json").write_text('{"text": "already present, must not be overwritten"}')
+
+    monkeypatch.setattr(lc, "_touched_files", {"gen_aaa.json", "gen_bbb.json"})
+
+    n_copied, n_bytes = lc.export_touched_cache()
+
+    assert n_copied == 1
+    assert (replay_dir / "gen_aaa.json").read_text() == '{"text": "a"}'
+    assert (replay_dir / "gen_bbb.json").read_text() == '{"text": "already present, must not be overwritten"}'
+    assert n_bytes == len((cache_dir / "gen_aaa.json").read_bytes())

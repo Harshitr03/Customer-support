@@ -25,6 +25,51 @@ _RETRY_DELAY_CAP_S = 120.0
 # calls too, not just within one.
 _last_embed_batch_at: float | None = None
 
+# Task 13: every cache filename this process has read (cache or replay hit)
+# or written, for `touched_cache_files()` / `export_touched_cache()`.
+_touched_files: set[str] = set()
+
+
+class OfflineModeError(RuntimeError):
+    """Raised by _raw_generate/_raw_embed when SUPPORT_AGENT_OFFLINE=1 and
+    no cached or replayed response exists for the call, instead of ever
+    touching the network."""
+
+
+def _check_offline_guard() -> None:
+    """Checked inside the raw network functions themselves (not generate()/
+    embed()) so it can't be bypassed by any caching path."""
+    if os.environ.get("SUPPORT_AGENT_OFFLINE") == "1":
+        raise OfflineModeError(
+            "offline mode: no cached response for this call — run with --live"
+        )
+
+
+def touched_cache_files() -> list[str]:
+    """Every cache filename this process has read (cache or replay hit) or
+    written to config.CACHE_DIR, for --export-cache."""
+    return sorted(_touched_files)
+
+
+def export_touched_cache() -> tuple[int, int]:
+    """Copy every file in touched_cache_files() from config.CACHE_DIR into
+    config.REPLAY_CACHE_DIR, skipping files already present there. The only
+    place that writes into REPLAY_CACHE_DIR -- generate()/embed() never do.
+    Returns (n_files_copied, n_bytes_copied)."""
+    config.REPLAY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    n_copied = 0
+    n_bytes = 0
+    for name in touched_cache_files():
+        src = config.CACHE_DIR / name
+        dst = config.REPLAY_CACHE_DIR / name
+        if dst.exists() or not src.exists():
+            continue
+        data = src.read_bytes()
+        dst.write_bytes(data)
+        n_copied += 1
+        n_bytes += len(data)
+    return n_copied, n_bytes
+
 
 def _get_client():
     global _client
@@ -113,6 +158,7 @@ def _cache_path(kind: str, key: str):
 
 
 def _raw_generate(prompt: str, temperature: float, model: str, json_mode: bool) -> str:
+    _check_offline_guard()
     from google.genai import types
 
     cfg = types.GenerateContentConfig(
@@ -129,6 +175,7 @@ def _raw_generate(prompt: str, temperature: float, model: str, json_mode: bool) 
 
 
 def _raw_embed(texts: list[str]) -> np.ndarray:
+    _check_offline_guard()
     from google.genai import types
 
     cfg = types.EmbedContentConfig(output_dimensionality=config.EMBED_DIM)
@@ -147,10 +194,17 @@ def generate(prompt: str, *, json_mode: bool = False, temperature: float = 0.2,
     path = _cache_path("gen", key)
     if path.exists():
         logger.debug("generate: cache hit (model=%s)", model)
+        _touched_files.add(path.name)
         return json.loads(path.read_text())["text"]
+    replay_path = config.REPLAY_CACHE_DIR / path.name
+    if replay_path.exists():
+        logger.debug("generate: replay cache hit (model=%s)", model)
+        _touched_files.add(path.name)
+        return json.loads(replay_path.read_text())["text"]
     logger.debug("generate: cache miss (model=%s)", model)
     text = _raw_generate(prompt, temperature, model, json_mode)
     path.write_text(json.dumps({"text": text}))
+    _touched_files.add(path.name)
     return text
 
 
@@ -183,9 +237,15 @@ def embed(texts: list[str]) -> np.ndarray:
         p = _cache_path("emb", _embed_cache_key(t))
         if p.exists():
             out[i] = np.array(json.loads(p.read_text()), dtype=np.float32)
-        else:
-            missing_idx.append(i)
-            missing_txt.append(t)
+            _touched_files.add(p.name)
+            continue
+        replay_p = config.REPLAY_CACHE_DIR / p.name
+        if replay_p.exists():
+            out[i] = np.array(json.loads(replay_p.read_text()), dtype=np.float32)
+            _touched_files.add(p.name)
+            continue
+        missing_idx.append(i)
+        missing_txt.append(t)
 
     batch_size = max(1, config.EMBED_BATCH)
     if missing_txt:
@@ -202,7 +262,8 @@ def embed(texts: list[str]) -> np.ndarray:
         vecs = _raw_embed(chunk_txt)
         for j, i in enumerate(chunk_idx):
             out[i] = vecs[j]
-            _cache_path("emb", _embed_cache_key(texts[i])).write_text(
-                json.dumps(vecs[j].tolist()))
+            cache_p = _cache_path("emb", _embed_cache_key(texts[i]))
+            cache_p.write_text(json.dumps(vecs[j].tolist()))
+            _touched_files.add(cache_p.name)
 
     return np.vstack(out)
