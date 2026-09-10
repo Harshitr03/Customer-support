@@ -148,6 +148,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.live:
         os.environ.pop("SUPPORT_AGENT_OFFLINE", None)
+        # Fix round 1: pre-flight check. config (imported at module load, above)
+        # already called load_dotenv() by this point, so os.environ reflects
+        # .env. Without this check, --live with no key ran stage 1 (up to ~1
+        # min CSV parse) and then crashed with a raw traceback deep inside
+        # run_eval.main() the first time it needed a client -- never print the
+        # key's value, just whether it's present.
+        if not os.environ.get("GEMINI_API_KEY"):
+            print(
+                "\n--live requires GEMINI_API_KEY, which is not set. Set it in .env "
+                "(see .env.example) or in the environment, then rerun with --live; "
+                "or omit --live to reproduce the headline results offline from the "
+                "committed replay cache (data/llm_cache/)."
+            )
+            return 1
     else:
         os.environ["SUPPORT_AGENT_OFFLINE"] = "1"
 

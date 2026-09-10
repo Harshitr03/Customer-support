@@ -138,3 +138,52 @@ def test_export_cache_without_live_is_a_noop(tmp_path, monkeypatch, capsys):
 
     code = run_demo.main(["--export-cache"])
     assert code == 0
+
+
+def test_live_without_key_exits_before_any_stage_with_helpful_message(tmp_path, monkeypatch, capsys):
+    """Fix round 1: --live with no GEMINI_API_KEY must fail fast, before stage
+    1 (the ~1 minute CSV parse), instead of crashing deep inside run_eval with
+    a raw traceback."""
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    code = run_demo.main(["--live"])
+
+    assert code != 0
+    assert calls == []  # no stage function was called
+    out = capsys.readouterr().out
+    assert "GEMINI_API_KEY" in out
+
+
+def test_live_with_key_present_runs_stages(tmp_path, monkeypatch):
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key-not-real")
+
+    code = run_demo.main(["--live"])
+
+    assert code == 0
+    assert calls == ["build_pool", "build_index", "build_golden_set", "run_eval",
+                      "human_agreement", "pipeline_handle"]
+
+
+def test_default_offline_mode_does_not_require_key(tmp_path, monkeypatch):
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    code = run_demo.main([])
+
+    assert code == 0
+    assert calls == ["build_pool", "build_index", "build_golden_set", "run_eval",
+                      "human_agreement", "pipeline_handle"]
