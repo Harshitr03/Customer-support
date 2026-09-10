@@ -13,6 +13,8 @@ BRAND = "SpotifyCares"
 
 GEN_MODEL = "gemini-2.5-flash"
 EMBED_MODEL = "gemini-embedding-001"
+EMBED_DIM = 768
+EMBED_BATCH = 100
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
