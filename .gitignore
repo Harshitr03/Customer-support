@@ -22,3 +22,7 @@ data/cache/
 
 # os
 .DS_Store
+
+# git worktrees used during implementation
+.worktrees/
+.superpowers/
