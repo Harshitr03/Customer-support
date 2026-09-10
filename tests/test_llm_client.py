@@ -81,6 +81,25 @@ def test_retry_with_backoff_retries_then_succeeds(monkeypatch):
     assert len(sleeps) == 2  # slept between the two failed attempts
 
 
+def test_retry_with_backoff_logs_warning_on_retry(monkeypatch, caplog):
+    from google.genai import errors as genai_errors
+
+    monkeypatch.setattr(lc.time, "sleep", lambda s: None)
+
+    attempts = {"n": 0}
+
+    def flaky():
+        attempts["n"] += 1
+        if attempts["n"] < 2:
+            raise genai_errors.ClientError(429, {"message": "rate limited"}, None)
+        return "ok"
+
+    with caplog.at_level("WARNING", logger=lc.logger.name):
+        result = lc._retry_with_backoff(flaky)
+    assert result == "ok"
+    assert any(record.levelname == "WARNING" for record in caplog.records)
+
+
 def test_retry_with_backoff_raises_non_retryable_immediately(monkeypatch):
     from google.genai import errors as genai_errors
 

@@ -1,3 +1,5 @@
+import logging
+
 from support_agent import config
 
 def test_config_constants():
@@ -14,3 +16,7 @@ def test_ensure_dirs_creates(tmp_path, monkeypatch):
     config.ensure_dirs()
     assert (tmp_path / "interim").is_dir()
     assert (tmp_path / "cache").is_dir()
+
+def test_setup_logging_runs():
+    config.setup_logging("DEBUG")
+    assert logging.getLogger().level == logging.DEBUG

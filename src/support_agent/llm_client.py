@@ -1,12 +1,15 @@
 """Gemini wrapper with on-disk caching. Network calls isolated in _raw_*."""
 import hashlib
 import json
+import logging
 import os
 import time
 
 import numpy as np
 
 from . import config
+
+logger = logging.getLogger(__name__)
 
 _client = None
 
@@ -46,6 +49,11 @@ def _retry_with_backoff(fn, *args, **kwargs):
         except Exception as exc:
             if attempt == _RETRYABLE_MAX_ATTEMPTS or not _is_retryable(exc):
                 raise
+            code = getattr(exc, "code", None)
+            logger.warning(
+                "retryable error (code=%s) on attempt %d/%d, retrying in %.1fs",
+                code, attempt, _RETRYABLE_MAX_ATTEMPTS, delay,
+            )
             time.sleep(delay)
             delay = min(delay * 2, _RETRYABLE_MAX_DELAY)
 
@@ -90,7 +98,9 @@ def generate(prompt: str, *, json_mode: bool = False, temperature: float = 0.2,
     key = json.dumps({"m": model, "p": prompt, "t": temperature, "j": json_mode})
     path = _cache_path("gen", key)
     if path.exists():
+        logger.debug("generate: cache hit (model=%s)", model)
         return json.loads(path.read_text())["text"]
+    logger.debug("generate: cache miss (model=%s)", model)
     text = _raw_generate(prompt, temperature, model, json_mode)
     path.write_text(json.dumps({"text": text}))
     return text
@@ -112,9 +122,16 @@ def embed(texts: list[str]) -> np.ndarray:
             missing_txt.append(t)
 
     batch_size = max(1, config.EMBED_BATCH)
+    if missing_txt:
+        n_batches = (len(missing_txt) + batch_size - 1) // batch_size
+        logger.info(
+            "embed: %d texts, %d cached, %d to fetch in %d batch(es)",
+            len(texts), len(texts) - len(missing_txt), len(missing_txt), n_batches,
+        )
     for start in range(0, len(missing_txt), batch_size):
         chunk_idx = missing_idx[start:start + batch_size]
         chunk_txt = missing_txt[start:start + batch_size]
+        logger.debug("embed: sending batch of %d texts", len(chunk_txt))
         vecs = _raw_embed(chunk_txt)
         for j, i in enumerate(chunk_idx):
             out[i] = vecs[j]

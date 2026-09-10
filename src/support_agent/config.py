@@ -1,4 +1,5 @@
 """Central config: paths, seeds, model IDs, constants."""
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -27,3 +28,13 @@ GOLDEN_DIR = DATA_DIR / "golden"
 def ensure_dirs() -> None:
     for d in (INTERIM_DIR, CACHE_DIR, KB_DIR, GOLDEN_DIR):
         d.mkdir(parents=True, exist_ok=True)
+
+
+def setup_logging(level: str = "INFO") -> None:
+    """Configure root logging once, with a concise format. Idempotent."""
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%H:%M:%S",
+        force=True,
+    )
