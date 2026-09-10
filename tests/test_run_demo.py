@@ -12,18 +12,24 @@ import run_demo  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _offline_env_isolated():
-    """run_demo.main() mutates os.environ["SUPPORT_AGENT_OFFLINE"] directly
-    (that's the whole point of the flag), so plain monkeypatch.setenv/delenv
-    can't be relied on to undo it -- monkeypatch only reverts changes made
-    through its own API, not raw os.environ mutations performed by the code
-    under test. Save/restore the real value by hand instead."""
-    had = "SUPPORT_AGENT_OFFLINE" in os.environ
-    original = os.environ.get("SUPPORT_AGENT_OFFLINE")
+    """run_demo.main() mutates os.environ["SUPPORT_AGENT_OFFLINE"] and
+    os.environ["SUPPORT_AGENT_NO_REPLAY"] directly (that's the whole point
+    of those flags), so plain monkeypatch.setenv/delenv can't be relied on
+    to undo them -- monkeypatch only reverts changes made through its own
+    API, not raw os.environ mutations performed by the code under test.
+    Save/restore the real values by hand instead."""
+    saved = {}
+    for var in ("SUPPORT_AGENT_OFFLINE", "SUPPORT_AGENT_NO_REPLAY"):
+        saved[var] = os.environ.get(var) if var in os.environ else _UNSET
     yield
-    if had:
-        os.environ["SUPPORT_AGENT_OFFLINE"] = original
-    else:
-        os.environ.pop("SUPPORT_AGENT_OFFLINE", None)
+    for var, original in saved.items():
+        if original is _UNSET:
+            os.environ.pop(var, None)
+        else:
+            os.environ[var] = original
+
+
+_UNSET = object()
 
 
 def _fake_handle_result():
@@ -138,6 +144,52 @@ def test_quota_exhausted_stops_cleanly_with_helpful_message(tmp_path, monkeypatc
     out = capsys.readouterr().out
     assert "eval harness" in out.lower() or "4/6" in out  # names the stage that needed it
     assert "midnight" in out.lower() and "pacific" in out.lower()
+
+
+def test_no_replay_without_live_is_rejected(tmp_path, monkeypatch, capsys):
+    """A5: --no-replay only makes sense alongside --live (offline mode
+    never consults the replay cache's fallback logic in the way --live
+    does -- there's no cache/ vs replay/ distinction to disable)."""
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+
+    code = run_demo.main(["--no-replay"])
+
+    assert code == 1
+    assert calls == []  # no stage ran
+    out = capsys.readouterr().out
+    assert "--no-replay" in out and "--live" in out
+
+
+def test_live_no_replay_sets_env_var(tmp_path, monkeypatch):
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key-not-real")
+
+    code = run_demo.main(["--live", "--no-replay"])
+
+    assert code == 0
+    assert os.environ.get("SUPPORT_AGENT_NO_REPLAY") == "1"
+
+
+def test_live_without_no_replay_clears_env_var(tmp_path, monkeypatch):
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key-not-real")
+    os.environ["SUPPORT_AGENT_NO_REPLAY"] = "1"  # leftover from a previous run
+
+    code = run_demo.main(["--live"])
+
+    assert code == 0
+    assert os.environ.get("SUPPORT_AGENT_NO_REPLAY") != "1"
 
 
 def test_export_cache_flag_calls_export_after_live_run(tmp_path, monkeypatch):

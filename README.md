@@ -63,13 +63,23 @@ cleanly with a message naming the stage and telling you to rerun with
 
 ## Recompute live (optional)
 
-Needs `GEMINI_API_KEY` in `.env`. This makes real Gemini API calls and will
-reproduce (not just replay) the headline numbers, subject to the free-tier
-quota (see `report/REPORT.md` for what that means for runtime).
+Needs `GEMINI_API_KEY` in `.env`. What each mode actually does:
+
+| Mode | What it does |
+|---|---|
+| default (no flags) | offline replay — every call is served from the committed replay cache at `data/llm_cache/`, zero network calls |
+| `--live` | calls the API **only** for responses cached in neither the local `data/cache/` nor the committed `data/llm_cache/` replay cache — everything already cached (local or replay) is still reused, not refetched |
+| `--live --no-replay` | ignores the committed replay cache entirely, so anything not already in the local `data/cache/` hits the network — delete `data/cache/` too for a full recompute from scratch |
 
 ```bash
-python scripts/run_demo.py --live
+python scripts/run_demo.py --live                 # fills in whatever isn't cached yet
+python scripts/run_demo.py --live --no-replay      # recompute, ignoring the committed replay cache
 ```
+
+Recomputing is **not bit-identical** to the committed replay cache: reply
+generation runs at temperature 0.2–0.3, so a fresh `--live` (or
+`--live --no-replay`) call for the same prompt can return different text
+than what's replayed. `--no-replay` is only valid together with `--live`.
 
 Preview exactly how many API calls a live eval run would make, without
 calling the network:
@@ -79,8 +89,10 @@ python -m eval.run_eval --estimate
 ```
 
 `--export-cache` (used with `--live`) copies every call that run actually
-touched into `data/llm_cache/`, skipping files already there — this is how
-the committed replay cache above was produced and refreshed:
+touched into `data/llm_cache/` — writing new files, overwriting any whose
+bytes have changed (so a stale replay entry doesn't linger), and skipping
+ones that are already identical. This is how the committed replay cache
+above was produced and refreshed:
 
 ```bash
 python scripts/run_demo.py --live --export-cache

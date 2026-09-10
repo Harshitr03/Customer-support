@@ -146,11 +146,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="After a --live run, copy every LLM/embedding call this "
                          "process touched into data/llm_cache/ (skips files "
                          "already there). Has no effect without --live.")
+    p.add_argument("--no-replay", action="store_true",
+                    help="With --live, ignore the committed replay cache "
+                         "(data/llm_cache/) so any call not already in the local "
+                         "cache/ hits the network. Delete data/cache/ too for a "
+                         "full recompute. Only valid together with --live.")
     return p.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+
+    if args.no_replay and not args.live:
+        print(
+            "\n--no-replay is only valid together with --live (offline mode never "
+            "reads the replay cache in the first place -- it's the default)."
+        )
+        return 1
+
     if args.live:
         os.environ.pop("SUPPORT_AGENT_OFFLINE", None)
         # Fix round 1: pre-flight check. config (imported at module load, above)
@@ -167,8 +180,13 @@ def main(argv: list[str] | None = None) -> int:
                 "committed replay cache (data/llm_cache/)."
             )
             return 1
+        if args.no_replay:
+            os.environ["SUPPORT_AGENT_NO_REPLAY"] = "1"
+        else:
+            os.environ.pop("SUPPORT_AGENT_NO_REPLAY", None)
     else:
         os.environ["SUPPORT_AGENT_OFFLINE"] = "1"
+        os.environ.pop("SUPPORT_AGENT_NO_REPLAY", None)
 
     code = run_stages()
 

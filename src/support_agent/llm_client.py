@@ -44,6 +44,15 @@ class QuotaExhaustedError(RuntimeError):
     a 429 normally is."""
 
 
+def _replay_disabled() -> bool:
+    """SUPPORT_AGENT_NO_REPLAY=1 disables the replay-cache lookup in
+    generate()/embed(), read at call time (not cached) so tests and
+    scripts/run_demo.py's --no-replay flag can flip it per-run. Only
+    meaningful alongside --live -- offline mode has no other fallback, so
+    combining the two just means every uncached call fails immediately."""
+    return os.environ.get("SUPPORT_AGENT_NO_REPLAY") == "1"
+
+
 def _check_offline_guard() -> None:
     """Checked inside the raw network functions themselves (not generate()/
     embed()) so it can't be bypassed by any caching path."""
@@ -261,7 +270,7 @@ def generate(prompt: str, *, json_mode: bool = False, temperature: float = 0.2,
         _touched_files.add(path.name)
         return json.loads(path.read_text())["text"]
     replay_path = config.REPLAY_CACHE_DIR / path.name
-    if replay_path.exists():
+    if not _replay_disabled() and replay_path.exists():
         logger.debug("generate: replay cache hit (model=%s)", model)
         _touched_files.add(path.name)
         return json.loads(replay_path.read_text())["text"]
@@ -304,7 +313,7 @@ def embed(texts: list[str]) -> np.ndarray:
             _touched_files.add(p.name)
             continue
         replay_p = config.REPLAY_CACHE_DIR / p.name
-        if replay_p.exists():
+        if not _replay_disabled() and replay_p.exists():
             out[i] = np.array(json.loads(replay_p.read_text()), dtype=np.float32)
             _touched_files.add(p.name)
             continue

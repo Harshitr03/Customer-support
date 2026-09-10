@@ -427,6 +427,44 @@ def test_touched_cache_files_records_writes_and_hits(tmp_path, monkeypatch):
     assert set(lc.touched_cache_files()) == touched_after_write
 
 
+def test_generate_ignores_replay_cache_when_no_replay_env_set(tmp_path, monkeypatch):
+    """A5: SUPPORT_AGENT_NO_REPLAY=1 must disable the replay-cache lookup so
+    --live --no-replay genuinely calls the network for anything not in the
+    local disk cache, even if a replay entry exists."""
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    cache_dir.mkdir()
+    replay_dir.mkdir()
+    monkeypatch.setattr(lc.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
+    monkeypatch.setenv("SUPPORT_AGENT_NO_REPLAY", "1")
+
+    key = json.dumps({"m": lc.config.GEN_MODEL, "p": "hi", "t": 0.2, "j": False})
+    path = lc._cache_path("gen", key)
+    (replay_dir / path.name).write_text(json.dumps({"text": "stale replay"}))
+
+    monkeypatch.setattr(lc, "_raw_generate", lambda *a, **k: "fresh from network")
+
+    assert lc.generate("hi") == "fresh from network"
+
+
+def test_embed_ignores_replay_cache_when_no_replay_env_set(tmp_path, monkeypatch):
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    cache_dir.mkdir()
+    replay_dir.mkdir()
+    monkeypatch.setattr(lc.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
+    monkeypatch.setenv("SUPPORT_AGENT_NO_REPLAY", "1")
+
+    key = lc._embed_cache_key("hello")
+    path = lc._cache_path("emb", key)
+    (replay_dir / path.name).write_text(json.dumps([9.0, 9.0, 9.0]))
+
+    monkeypatch.setattr(lc, "_raw_embed", lambda texts: np.array([[1.0, 2.0, 3.0]]))
+
+    out = lc.embed(["hello"])
+    assert np.allclose(out, [[1.0, 2.0, 3.0]])
+
+
 def test_export_touched_cache_writes_new_files(tmp_path, monkeypatch):
     cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
     cache_dir.mkdir()
