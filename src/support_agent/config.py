@@ -16,6 +16,9 @@ GEN_MODEL = "gemini-2.5-flash"
 EMBED_MODEL = "gemini-embedding-001"
 EMBED_DIM = 768
 EMBED_BATCH = 100
+# Free-tier embed quota is 100 requests (each input text counts) per minute
+# per user/project/model, so pace batches to at most one per this interval.
+EMBED_BATCH_INTERVAL_S = 61.0
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"

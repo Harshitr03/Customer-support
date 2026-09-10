@@ -17,6 +17,13 @@ _client = None
 _RETRYABLE_MAX_ATTEMPTS = 5
 _RETRYABLE_BASE_DELAY = 2.0
 _RETRYABLE_MAX_DELAY = 60.0
+_RETRY_DELAY_SLACK_S = 1.0
+_RETRY_DELAY_CAP_S = 120.0
+
+# Process-wide timestamp (time.monotonic()) of when the last real embed
+# batch was sent, so free-tier quota pacing applies across separate embed()
+# calls too, not just within one.
+_last_embed_batch_at: float | None = None
 
 
 def _get_client():
@@ -38,10 +45,41 @@ def _is_retryable(exc: Exception) -> bool:
     return False
 
 
+def _parse_retry_delay(exc: Exception) -> float | None:
+    """Extract the server-suggested retry delay (seconds) from an APIError's
+    details, if present. The genai SDK exposes the raw error body as
+    `exc.details`, e.g. `{'error': {..., 'details': [..., {'@type':
+    '.../RetryInfo', 'retryDelay': '47s'}]}}` (some responses omit the outer
+    'error' wrapper). Returns None if absent or unparseable."""
+    details = getattr(exc, "details", None)
+    if not isinstance(details, dict):
+        return None
+    err = details.get("error", details)
+    if not isinstance(err, dict):
+        return None
+    sub_details = err.get("details")
+    if not isinstance(sub_details, list):
+        return None
+    for d in sub_details:
+        if not isinstance(d, dict):
+            continue
+        if not str(d.get("@type", "")).endswith("RetryInfo"):
+            continue
+        delay = d.get("retryDelay")
+        if isinstance(delay, str) and delay.endswith("s"):
+            try:
+                return float(delay[:-1])
+            except ValueError:
+                return None
+    return None
+
+
 def _retry_with_backoff(fn, *args, **kwargs):
-    """Call fn(*args, **kwargs), retrying on rate-limit/server errors with
-    exponential backoff. Anything else (e.g. auth errors) is re-raised
-    immediately."""
+    """Call fn(*args, **kwargs), retrying on rate-limit/server errors.
+    When the error carries a server-suggested retryDelay (RetryInfo detail),
+    sleep that long (plus a small slack, capped) instead of guessing;
+    otherwise fall back to exponential backoff. Anything else (e.g. auth
+    errors) is re-raised immediately."""
     delay = _RETRYABLE_BASE_DELAY
     for attempt in range(1, _RETRYABLE_MAX_ATTEMPTS + 1):
         try:
@@ -50,12 +88,22 @@ def _retry_with_backoff(fn, *args, **kwargs):
             if attempt == _RETRYABLE_MAX_ATTEMPTS or not _is_retryable(exc):
                 raise
             code = getattr(exc, "code", None)
-            logger.warning(
-                "retryable error (code=%s) on attempt %d/%d, retrying in %.1fs",
-                code, attempt, _RETRYABLE_MAX_ATTEMPTS, delay,
-            )
-            time.sleep(delay)
-            delay = min(delay * 2, _RETRYABLE_MAX_DELAY)
+            retry_delay = _parse_retry_delay(exc)
+            if retry_delay is not None:
+                wait = min(retry_delay + _RETRY_DELAY_SLACK_S, _RETRY_DELAY_CAP_S)
+                logger.warning(
+                    "retryable error (code=%s) on attempt %d/%d, server "
+                    "requested retryDelay=%.1fs, retrying in %.1fs",
+                    code, attempt, _RETRYABLE_MAX_ATTEMPTS, retry_delay, wait,
+                )
+            else:
+                wait = delay
+                logger.warning(
+                    "retryable error (code=%s) on attempt %d/%d, retrying in %.1fs",
+                    code, attempt, _RETRYABLE_MAX_ATTEMPTS, wait,
+                )
+                delay = min(delay * 2, _RETRYABLE_MAX_DELAY)
+            time.sleep(wait)
 
 
 def _cache_path(kind: str, key: str):
@@ -110,6 +158,24 @@ def _embed_cache_key(text: str) -> str:
     return f"{config.EMBED_MODEL}::{config.EMBED_DIM}::{text}"
 
 
+def _pace_embed_batch() -> None:
+    """Block until at least config.EMBED_BATCH_INTERVAL_S seconds have
+    passed since the previous real embed batch was sent (process-wide), to
+    stay under the free-tier per-minute embed quota. The first batch in a
+    process goes immediately."""
+    global _last_embed_batch_at
+    now = time.monotonic()
+    if _last_embed_batch_at is not None:
+        wait = config.EMBED_BATCH_INTERVAL_S - (now - _last_embed_batch_at)
+        if wait > 0:
+            logger.info(
+                "pacing: waiting %.0fs before next embed batch (free-tier quota)",
+                wait,
+            )
+            time.sleep(wait)
+    _last_embed_batch_at = time.monotonic()
+
+
 def embed(texts: list[str]) -> np.ndarray:
     out: list[np.ndarray | None] = [None] * len(texts)
     missing_idx, missing_txt = [], []
@@ -132,6 +198,7 @@ def embed(texts: list[str]) -> np.ndarray:
         chunk_idx = missing_idx[start:start + batch_size]
         chunk_txt = missing_txt[start:start + batch_size]
         logger.debug("embed: sending batch of %d texts", len(chunk_txt))
+        _pace_embed_batch()
         vecs = _raw_embed(chunk_txt)
         for j, i in enumerate(chunk_idx):
             out[i] = vecs[j]

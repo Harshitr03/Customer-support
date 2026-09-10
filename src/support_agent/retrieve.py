@@ -36,6 +36,7 @@ def build_index() -> None:
         "index built: %d texts embedded, shape=%s, elapsed=%.1fs",
         len(texts), vecs.shape, elapsed,
     )
+    _load_index.cache_clear()
 
 
 @functools.lru_cache(maxsize=1)
