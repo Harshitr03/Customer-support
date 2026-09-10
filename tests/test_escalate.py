@@ -47,3 +47,31 @@ def test_hacked_account_message_escalates():
 def test_no_risk_language_false_positive():
     e, reason = esc.decide("feature_complaint", 0.95, [], "the new UI is terrible")
     assert not e
+
+
+def test_fraudulent_charge_escalates_with_risk_reason():
+    # Regression: \bfraud\b never matched "fraudulent" (same stem/word-boundary
+    # bug class as "unauthoriz" -> "unauthorized"). 5 real occurrences in
+    # data/interim/corpus_pool.parquet were false negatives before this fix.
+    e, reason = esc.decide("other", 0.95, [], "I noticed a fraudulent charge on my account")
+    assert e and "risk language" in reason
+
+
+def test_scammed_message_escalates_with_risk_reason():
+    e, reason = esc.decide("other", 0.95, [], "they scammed me out of my subscription fee")
+    assert e and "risk language" in reason
+
+
+def test_suing_message_escalates_with_risk_reason():
+    e, reason = esc.decide("other", 0.95, [], "I'm suing you over this")
+    assert e and "risk language" in reason
+
+
+def test_disputed_charge_escalates_with_risk_reason():
+    e, reason = esc.decide("billing_subscription", 0.95, [], "I disputed the charge with my bank")
+    assert e and "risk language" in reason
+
+
+def test_charged_back_message_escalates_with_risk_reason():
+    e, reason = esc.decide("billing_subscription", 0.95, [], "I charged back the payment")
+    assert e and "risk language" in reason

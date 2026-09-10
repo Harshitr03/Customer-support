@@ -15,15 +15,28 @@ CONF_THRESHOLD = 0.55
 MAX_UNRESOLVED_TURNS = 6  # 3+ back-and-forth rounds
 
 # Word boundaries wrap each alternative so short words (e.g. "sue", "legal")
-# don't match inside unrelated words. Every alternative here is a complete
-# word/phrase, not a partial stem, EXCEPT the fixed case below: the original
-# reference regex used the bare stem "unauthoriz" with a trailing \b, which
-# requires a word boundary immediately after "...unauthoriz" -- but the
-# customer phrase is "unauthorized"/"unauthorised", where letters ("ed"/"ised")
-# immediately follow the stem, so no boundary exists there and the pattern
-# could never match. Fixed by spelling out the full word with both spellings.
-_RISK = re.compile(r"\b(sue|lawsuit|legal|fraud|scam|gdpr|police|hack(ed|ing)?|"
-                   r"stolen|unauthori[sz]ed|dispute|chargeback)\b", re.I)
+# don't match inside unrelated words. That trailing \b is exactly what makes a
+# *bare stem* alternative fail to match its own inflected forms: \bfraud\b
+# demands a word boundary immediately after "...fraud", but "fraudulent"
+# continues with more letters right there, so no boundary exists and the
+# alternative can never match "fraudulent" -- same mechanism as the original
+# "unauthoriz" bug (fixed previously by spelling out "unauthori[sz]ed").
+#
+# Round-1 fix only patched "unauthoriz"; this pass audited every remaining
+# alternative for the same stem/word-boundary shape and found it recurring in:
+#   - fraud       -> fraud(ulent)?                  ("a fraudulent charge")
+#   - scam        -> scam(s|med|ming|mer|mers)?     ("they scammed me")
+#   - sue         -> su(e|ed|es|ing)                ("I am suing you")
+#   - dispute     -> disput(e|es|ed|ing)             ("I disputed the charge")
+#   - chargeback  -> charge[ds]?\s*back              ("I charged back the payment")
+#   - lawsuit     -> lawsuit(s)?                     (plural "lawsuits")
+# lawsuit, legal, gdpr, police, stolen, and hack(ed|ing)? were re-checked and
+# either already enumerate their suffix forms (hack) or have no plausible
+# customer inflection beyond the bare word (legal, gdpr, police, stolen).
+_RISK = re.compile(r"\b(su(e|ed|es|ing)|lawsuit(s)?|legal|fraud(ulent)?|"
+                   r"scam(s|med|ming|mer|mers)?|gdpr|police|hack(ed|ing)?|"
+                   r"stolen|unauthori[sz]ed|disput(e|es|ed|ing)|"
+                   r"charge[ds]?\s*back)\b", re.I)
 
 
 def decide(intent: str, confidence: float, turns: list[dict], message: str) -> tuple[bool, str]:
