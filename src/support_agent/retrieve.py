@@ -22,15 +22,23 @@ def build_index() -> None:
     vp = config.KB_DIR / "kb_vectors.npy"
     mp = config.KB_DIR / "kb_meta.parquet"
     if vp.exists() and mp.exists():
-        logger.info("index cache hit, skipping build")
-        return
-    logger.info("index cache miss, building")
+        existing_size = len(pd.read_parquet(mp))
+        if existing_size == config.KB_SIZE:
+            logger.info("index up to date (%d rows)", existing_size)
+            return
+        logger.info(
+            "index size %d != KB_SIZE %d, rebuilding",
+            existing_size, config.KB_SIZE,
+        )
+    else:
+        logger.info("index cache miss, building")
     start = time.monotonic()
     corpus, _ = data_prep.load_pools()
+    corpus = corpus.iloc[:config.KB_SIZE]
     texts = corpus["customer_open"].tolist()
     vecs = llm_client.embed(texts)
     np.save(vp, _normalize(vecs))
-    corpus[["customer_open", "spotify_reply"]].reset_index(drop=True).to_parquet(mp)
+    corpus[["root_id", "customer_open", "spotify_reply"]].reset_index(drop=True).to_parquet(mp)
     elapsed = time.monotonic() - start
     logger.info(
         "index built: %d texts embedded, shape=%s, elapsed=%.1fs",
