@@ -422,6 +422,12 @@ def main(estimate_only: bool = False) -> dict:
 
     reference_map = build_reference_map(subset, eval_df)
     t1 = time.monotonic()
+    # A2: pre-embed the whole reply-subset in ONE batched call. Each query
+    # would otherwise be embedded one-at-a-time inside nearest_reply's and
+    # grounded_reply's own retrieve() call, each paced a full
+    # EMBED_BATCH_INTERVAL_S apart -- about an hour for 60 messages. Doing
+    # it here means retrieve() below hits the per-text cache instead.
+    llm_client.embed(subset["message"].tolist())
     trivial_replies = [draft_reply.trivial_reply(pi) for pi in sub_pred_intents]
     nearest_replies = [draft_reply.nearest_reply(m) for m in subset["message"]]
     grounded_replies = [draft_reply.grounded_reply(m, pi)

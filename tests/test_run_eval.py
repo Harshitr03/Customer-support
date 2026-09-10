@@ -367,6 +367,8 @@ def test_main_full_run_writes_ruling7_outputs(tmp_path, monkeypatch):
     monkeypatch.setattr(run_eval.draft_reply, "trivial_reply", lambda intent: f"trivial:{intent}")
     monkeypatch.setattr(run_eval.draft_reply, "nearest_reply", lambda msg: f"nearest:{msg}")
     monkeypatch.setattr(run_eval.draft_reply, "grounded_reply", lambda msg, intent: f"grounded:{intent}:{msg}")
+    monkeypatch.setattr(run_eval.llm_client, "embed",
+                        lambda texts: np.zeros((len(texts), 8), dtype=np.float32))
     monkeypatch.setattr(run_eval, "judge_reply",
                         lambda message, reply, reference: {"grounded": 4, "factual": 4, "tone": 4,
                                                             "actionable": 4, "overall": 4})
@@ -402,3 +404,70 @@ def test_main_full_run_writes_ruling7_outputs(tmp_path, monkeypatch):
     for col in ("pair_id", "root_id", "message", "system", "reply", "reference",
                 "judge_overall", "human_overall"):
         assert col in htmpl.columns
+
+
+# ---------------------------------------------------------------------------
+# A2: batch the reply-subset query embeddings into one embed() call
+# ---------------------------------------------------------------------------
+
+def test_main_batches_subset_embeddings_in_one_call_before_drafting(tmp_path, monkeypatch):
+    """Today each query is embedded one-at-a-time inside nearest_reply /
+    grounded_reply's retrieve() call, each paced 61s apart -- about an hour
+    for 60 messages. main() must pre-embed the whole reply-subset in ONE
+    llm_client.embed() call before any reply is drafted, so retrieve() then
+    hits the per-text cache instead of triggering its own network batch."""
+    n, n_spotcheck, n_extra = 10, 3, 2
+    golden = _fake_golden(n=n, n_spotcheck=n_spotcheck)
+    eval_df = pd.DataFrame({
+        "root_id": golden["root_id"],
+        "spotify_reply": [f"real reply {i}" for i in range(n)],
+    })
+    corpus = pd.DataFrame({"customer_open": ["a", "b", "c"]})
+
+    calls = []  # order-of-call trace, shared by the embed stub and the reply stubs
+
+    def fake_embed(texts):
+        calls.append(("embed", list(texts)))
+        return np.zeros((len(texts), 8), dtype=np.float32)
+
+    def fake_trivial(intent):
+        calls.append(("trivial", intent))
+        return f"trivial:{intent}"
+
+    def fake_nearest(msg):
+        calls.append(("nearest", msg))
+        return f"nearest:{msg}"
+
+    def fake_grounded(msg, intent):
+        calls.append(("grounded", intent, msg))
+        return f"grounded:{intent}:{msg}"
+
+    monkeypatch.setattr(run_eval, "load_golden", lambda: golden)
+    monkeypatch.setattr(run_eval.data_prep, "load_pools", lambda: (corpus, eval_df))
+    monkeypatch.setattr(run_eval, "N_EXTRA_NONSPOTCHECK", n_extra)
+    monkeypatch.setattr(run_eval.weak_labels, "weak_label", lambda t: "other")
+    monkeypatch.setattr(run_eval.classify, "llm_classify", _stub_llm_classify)
+    monkeypatch.setattr(run_eval.classify.SimpleClassifier, "from_weak_corpus",
+                        classmethod(lambda cls: _StubSimple()))
+    monkeypatch.setattr(run_eval.llm_client, "embed", fake_embed)
+    monkeypatch.setattr(run_eval.draft_reply, "trivial_reply", fake_trivial)
+    monkeypatch.setattr(run_eval.draft_reply, "nearest_reply", fake_nearest)
+    monkeypatch.setattr(run_eval.draft_reply, "grounded_reply", fake_grounded)
+    monkeypatch.setattr(run_eval, "judge_reply",
+                        lambda message, reply, reference: {"grounded": 4, "factual": 4, "tone": 4,
+                                                            "actionable": 4, "overall": 4})
+    monkeypatch.setattr(run_eval.config, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(run_eval, "N_BOOTSTRAP", 5)
+
+    run_eval.main(estimate_only=False)
+
+    embed_calls = [c for c in calls if c[0] == "embed"]
+    assert len(embed_calls) == 1, f"expected exactly one embed() call, got {len(embed_calls)}"
+
+    n_subset = n_spotcheck + n_extra
+    assert len(embed_calls[0][1]) == n_subset
+
+    # the batched embed call happens before any reply is drafted
+    first_draft_idx = min(i for i, c in enumerate(calls) if c[0] in ("trivial", "nearest", "grounded"))
+    embed_idx = next(i for i, c in enumerate(calls) if c[0] == "embed")
+    assert embed_idx < first_draft_idx
