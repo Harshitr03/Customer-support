@@ -26,6 +26,7 @@ and the ruling list in the task prompt for what overrides it):
 """
 import json
 import logging
+import os
 import sys
 import time
 
@@ -185,13 +186,28 @@ def _classify_cache_key(message: str) -> str:
     return json.dumps({"m": config.GEN_MODEL, "p": prompt, "t": 0.2, "j": True})
 
 
+def _is_cached_anywhere(path) -> bool:
+    """True if `path` (a llm_client._cache_path(...) result) exists in the
+    local CACHE_DIR, or -- unless SUPPORT_AGENT_NO_REPLAY disables it --
+    the committed REPLAY_CACHE_DIR under the same filename. A replay-only
+    hit is just as call-free as a local-cache hit: generate()/embed() fall
+    back to REPLAY_CACHE_DIR themselves, so counting only CACHE_DIR here
+    would undercount what a real (offline or --live) run can already
+    serve with zero network calls."""
+    if path.exists():
+        return True
+    if llm_client._replay_disabled():
+        return False
+    return (config.REPLAY_CACHE_DIR / path.name).exists()
+
+
 def _is_gen_cached(key: str) -> bool:
-    return llm_client._cache_path("gen", key).exists()
+    return _is_cached_anywhere(llm_client._cache_path("gen", key))
 
 
 def _is_embed_cached(text: str) -> bool:
     key = llm_client._embed_cache_key(text)
-    return llm_client._cache_path("emb", key).exists()
+    return _is_cached_anywhere(llm_client._cache_path("emb", key))
 
 
 def _cached_llm_classify(message: str):
@@ -573,6 +589,20 @@ def main(estimate_only: bool = False) -> dict:
     return results
 
 
+def _apply_cli_offline_default(argv: list[str]) -> None:
+    """A8: `python -m eval.run_eval` must not spend quota unless --live is
+    passed -- without it, force SUPPORT_AGENT_OFFLINE=1 before main() runs.
+    --estimate is always offline (it never calls the network either way,
+    but this keeps that invariant true even if --live is also passed)."""
+    live = "--live" in argv
+    estimate_only = "--estimate" in argv
+    if estimate_only or not live:
+        os.environ["SUPPORT_AGENT_OFFLINE"] = "1"
+    else:
+        os.environ.pop("SUPPORT_AGENT_OFFLINE", None)
+
+
 if __name__ == "__main__":
     config.setup_logging("INFO")
+    _apply_cli_offline_default(sys.argv)
     main(estimate_only="--estimate" in sys.argv)

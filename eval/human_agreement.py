@@ -191,7 +191,10 @@ def load_scores() -> pd.DataFrame | None:
     if not path.exists():
         print(
             "No data/golden/human_scores.csv found yet. To produce it:\n"
-            "  1. Run the eval harness (writes results/human_scoring_template.csv):\n"
+            "  1. Run the eval harness -- offline by default (zero API calls,\n"
+            "     replays results from data/llm_cache/; pass --live to make real\n"
+            "     calls for anything not already cached) -- it writes\n"
+            "     results/human_scoring_template.csv:\n"
             "       .venv/bin/python -m eval.run_eval\n"
             "  2. Fill in the human_overall column for every row of that CSV.\n"
             "  3. Save it as data/golden/human_scores.csv, then re-run this module."

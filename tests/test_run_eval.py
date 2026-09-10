@@ -220,6 +220,7 @@ def test_human_scoring_template_raises_on_missing_reply_row():
 
 def test_estimate_calls_counts_uncached_when_nothing_cached(tmp_path, monkeypatch):
     monkeypatch.setattr(run_eval.config, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(run_eval.config, "REPLAY_CACHE_DIR", tmp_path / "replay")
     golden = pd.DataFrame({
         "root_id": [1, 2], "message": ["hello world", "goodbye world"],
         "gold_intent": ["other", "other"], "gold_escalate": [False, False],
@@ -239,6 +240,7 @@ def test_estimate_calls_counts_uncached_when_nothing_cached(tmp_path, monkeypatc
 
 def test_estimate_calls_subtracts_provably_cached(tmp_path, monkeypatch):
     monkeypatch.setattr(run_eval.config, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(run_eval.config, "REPLAY_CACHE_DIR", tmp_path / "replay")
     message = "hello world"
     golden = pd.DataFrame({
         "root_id": [1], "message": [message], "gold_intent": ["other"],
@@ -306,6 +308,79 @@ def test_estimate_calls_subtracts_provably_cached(tmp_path, monkeypatch):
     assert est4["judge_calls"]["provably_cached"] == 3
 
 
+# ---------------------------------------------------------------------------
+# A8: --estimate must count a REPLAY_CACHE_DIR hit as cached too (unless
+# SUPPORT_AGENT_NO_REPLAY is set), not just a local CACHE_DIR hit
+# ---------------------------------------------------------------------------
+
+def test_is_gen_cached_counts_replay_cache_hit(tmp_path, monkeypatch):
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    replay_dir.mkdir()
+    monkeypatch.setattr(run_eval.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(run_eval.config, "REPLAY_CACHE_DIR", replay_dir)
+    monkeypatch.delenv("SUPPORT_AGENT_NO_REPLAY", raising=False)
+
+    key = json.dumps({"m": "x", "p": "prompt", "t": 0.2, "j": False})
+    path = run_eval.llm_client._cache_path("gen", key)  # also creates CACHE_DIR
+    assert not run_eval._is_gen_cached(key)  # neither cache nor replay has it yet
+
+    (replay_dir / path.name).write_text(json.dumps({"text": "replayed"}))
+    assert run_eval._is_gen_cached(key)  # now provably servable with zero network calls
+
+
+def test_is_gen_cached_ignores_replay_when_no_replay_set(tmp_path, monkeypatch):
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    replay_dir.mkdir()
+    monkeypatch.setattr(run_eval.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(run_eval.config, "REPLAY_CACHE_DIR", replay_dir)
+    monkeypatch.setenv("SUPPORT_AGENT_NO_REPLAY", "1")
+
+    key = json.dumps({"m": "x", "p": "prompt", "t": 0.2, "j": False})
+    path = run_eval.llm_client._cache_path("gen", key)
+    (replay_dir / path.name).write_text(json.dumps({"text": "replayed"}))
+
+    assert not run_eval._is_gen_cached(key)  # --no-replay: the replay hit doesn't count
+
+
+def test_is_embed_cached_counts_replay_cache_hit(tmp_path, monkeypatch):
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    replay_dir.mkdir()
+    monkeypatch.setattr(run_eval.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(run_eval.config, "REPLAY_CACHE_DIR", replay_dir)
+    monkeypatch.delenv("SUPPORT_AGENT_NO_REPLAY", raising=False)
+
+    text = "hello"
+    assert not run_eval._is_embed_cached(text)
+
+    key = run_eval.llm_client._embed_cache_key(text)
+    path = run_eval.llm_client._cache_path("emb", key)
+    (replay_dir / path.name).write_text(json.dumps([1.0, 2.0, 3.0]))
+    assert run_eval._is_embed_cached(text)
+
+
+# ---------------------------------------------------------------------------
+# A8: `python -m eval.run_eval` defaults to offline unless --live is passed;
+# --estimate is always offline regardless of --live
+# ---------------------------------------------------------------------------
+
+def test_cli_offline_default_sets_offline_without_live(monkeypatch):
+    monkeypatch.delenv("SUPPORT_AGENT_OFFLINE", raising=False)
+    run_eval._apply_cli_offline_default(["run_eval.py"])
+    assert run_eval.os.environ.get("SUPPORT_AGENT_OFFLINE") == "1"
+
+
+def test_cli_offline_default_clears_offline_with_live(monkeypatch):
+    monkeypatch.setenv("SUPPORT_AGENT_OFFLINE", "1")
+    run_eval._apply_cli_offline_default(["run_eval.py", "--live"])
+    assert run_eval.os.environ.get("SUPPORT_AGENT_OFFLINE") != "1"
+
+
+def test_cli_offline_default_estimate_is_always_offline_even_with_live(monkeypatch):
+    monkeypatch.delenv("SUPPORT_AGENT_OFFLINE", raising=False)
+    run_eval._apply_cli_offline_default(["run_eval.py", "--live", "--estimate"])
+    assert run_eval.os.environ.get("SUPPORT_AGENT_OFFLINE") == "1"
+
+
 def test_main_estimate_only_makes_no_network_call_and_returns_counts(tmp_path, monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("network call attempted during --estimate")
@@ -313,6 +388,7 @@ def test_main_estimate_only_makes_no_network_call_and_returns_counts(tmp_path, m
     monkeypatch.setattr(run_eval.llm_client, "_raw_generate", _boom)
     monkeypatch.setattr(run_eval.llm_client, "_raw_embed", _boom)
     monkeypatch.setattr(run_eval.config, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(run_eval.config, "REPLAY_CACHE_DIR", tmp_path / "replay")
 
     fake_golden = _fake_golden(n=12, n_spotcheck=4)
     fake_eval_df = pd.DataFrame({
