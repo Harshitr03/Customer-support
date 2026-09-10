@@ -201,7 +201,6 @@ def test_human_scoring_template_rotates_systems():
     tmpl = run_eval.build_human_scoring_template(spotcheck, reply_rows)
     assert list(tmpl["system"]) == ["trivial", "nearest", "grounded", "trivial"]
     assert list(tmpl["pair_id"]) == [1, 2, 3, 4]
-    assert (tmpl["human_overall"] == "").all()
     assert list(tmpl["judge_overall"]) == [1, 2, 3, 4]
     assert tmpl.loc[0, "reply"] == "trivial-reply-1"
 
@@ -212,6 +211,73 @@ def test_human_scoring_template_raises_on_missing_reply_row():
                                 "reference": [], "overall": []})
     with pytest.raises(ValueError):
         run_eval.build_human_scoring_template(spotcheck, reply_rows)
+
+
+# ---------------------------------------------------------------------------
+# B1: build_blind_human_scoring -- blind sheet + separate key, seeded shuffle
+# ---------------------------------------------------------------------------
+
+def _make_spotcheck_and_reply_rows(n=40):
+    spotcheck = pd.DataFrame({
+        "root_id": list(range(1, n + 1)),
+        "message": [f"m{i}" for i in range(1, n + 1)],
+    })
+    reply_rows = pd.DataFrame([
+        {"root_id": rid, "system": sys_, "reply": f"{sys_}-reply-{rid}",
+         "reference": f"ref-{rid}", "overall": (rid % 5) + 1}
+        for rid in range(1, n + 1) for sys_ in ["trivial", "nearest", "grounded"]
+    ])
+    return spotcheck, reply_rows
+
+
+def test_build_blind_human_scoring_blind_df_has_no_system_or_judge_score():
+    spotcheck, reply_rows = _make_spotcheck_and_reply_rows(n=6)
+    blind_df, key_df = run_eval.build_blind_human_scoring(spotcheck, reply_rows)
+    assert set(blind_df.columns) == {"item_id", "message", "reply", "reference", "human_overall"}
+    assert "system" not in blind_df.columns
+    assert "judge_overall" not in blind_df.columns
+    assert (blind_df["human_overall"] == "").all()
+
+
+def test_build_blind_human_scoring_item_ids_are_h01_style_assigned_after_shuffle():
+    spotcheck, reply_rows = _make_spotcheck_and_reply_rows(n=6)
+    blind_df, key_df = run_eval.build_blind_human_scoring(spotcheck, reply_rows)
+    assert list(blind_df["item_id"]) == ["h01", "h02", "h03", "h04", "h05", "h06"]
+    assert list(key_df["item_id"]) == ["h01", "h02", "h03", "h04", "h05", "h06"]
+    # the shuffle really did reorder relative to the original pair_id 1..6
+    # order (seed 42 on 6 items -- not literally 1,2,3,4,5,6 in that order)
+    assert list(key_df["pair_id"]) != [1, 2, 3, 4, 5, 6]
+
+
+def test_build_blind_human_scoring_key_df_recovers_system_and_reply():
+    spotcheck, reply_rows = _make_spotcheck_and_reply_rows(n=6)
+    blind_df, key_df = run_eval.build_blind_human_scoring(spotcheck, reply_rows)
+    assert set(key_df.columns) == {"item_id", "pair_id", "root_id", "system"}
+
+    # joining item_id -> key_df -> reply_rows must recover exactly the reply
+    # text shown in blind_df for that item (the whole point of the key).
+    merged = blind_df.merge(key_df, on="item_id")
+    for _, row in merged.iterrows():
+        expected_reply = reply_rows[(reply_rows["root_id"] == row["root_id"]) &
+                                     (reply_rows["system"] == row["system"])]["reply"].iloc[0]
+        assert row["reply"] == expected_reply
+
+
+def test_build_blind_human_scoring_is_deterministic_for_fixed_seed():
+    spotcheck, reply_rows = _make_spotcheck_and_reply_rows(n=10)
+    blind1, key1 = run_eval.build_blind_human_scoring(spotcheck, reply_rows, seed=42)
+    blind2, key2 = run_eval.build_blind_human_scoring(spotcheck, reply_rows, seed=42)
+    pd.testing.assert_frame_equal(blind1, blind2)
+    pd.testing.assert_frame_equal(key1, key2)
+
+
+def test_build_blind_human_scoring_covers_all_40_spotcheck_pairs():
+    spotcheck, reply_rows = _make_spotcheck_and_reply_rows(n=40)
+    blind_df, key_df = run_eval.build_blind_human_scoring(spotcheck, reply_rows)
+    assert len(blind_df) == 40
+    assert len(key_df) == 40
+    assert set(key_df["item_id"]) == {f"h{i:02d}" for i in range(1, 41)}
+    assert set(key_df["root_id"]) == set(range(1, 41))
 
 
 # ---------------------------------------------------------------------------
@@ -476,11 +542,22 @@ def test_main_full_run_writes_ruling7_outputs(tmp_path, monkeypatch):
                 "grounded", "factual", "tone", "actionable", "overall"):
         assert col in rrows.columns
 
-    htmpl = pd.read_csv(tmp_path / "human_scoring_template.csv")
-    assert len(htmpl) == n_spotcheck
-    for col in ("pair_id", "root_id", "message", "system", "reply", "reference",
-                "judge_overall", "human_overall"):
-        assert col in htmpl.columns
+    hblind = pd.read_csv(tmp_path / "human_scoring_blind.csv")
+    assert len(hblind) == n_spotcheck
+    for col in ("item_id", "message", "reply", "reference", "human_overall"):
+        assert col in hblind.columns
+    assert "system" not in hblind.columns
+    assert "judge_overall" not in hblind.columns
+
+    hkey = pd.read_csv(tmp_path / "human_scoring_key.csv")
+    assert len(hkey) == n_spotcheck
+    for col in ("item_id", "pair_id", "root_id", "system"):
+        assert col in hkey.columns
+    assert set(hkey["item_id"]) == set(hblind["item_id"])
+
+    assert (tmp_path / "human_scoring_rubric.md").exists()
+    rubric_text = (tmp_path / "human_scoring_rubric.md").read_text()
+    assert "1" in rubric_text and "5" in rubric_text
 
 
 # ---------------------------------------------------------------------------

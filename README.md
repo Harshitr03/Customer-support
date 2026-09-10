@@ -120,7 +120,9 @@ pytest -q          # all unit tests, no network (every LLM/embedding call is moc
   reproduce the numbers offline, in minutes, with no API key.
 - `results/` — the eval harness's output: `eval_results.json` (metrics +
   bootstrap confidence intervals), `classification_rows.csv`,
-  `reply_rows.csv`, and `human_scoring_template.csv`.
+  `reply_rows.csv`, and the blind human-scoring set (`human_scoring_blind.csv`,
+  `human_scoring_key.csv`, `human_scoring_rubric.md` — see "Human-agreement
+  workflow" below).
 
 Not committed: `data/raw/` (the Kaggle CSV — download it yourself),
 `data/interim/` (parsed thread pools, rebuilt from the CSV on first run),
@@ -138,15 +140,37 @@ Don't take our word for it — read them straight from the source:
 
 ## Human-agreement workflow
 
-The eval harness writes `results/human_scoring_template.csv` — one row per
-(message, reply) pair from the spot-check subset, already scored by the LLM
-judge. To add a human comparison point:
+Human scoring is **blind by construction**, enforced in code, not just by
+convention — the file a human rater sees never carries the drafting
+system's name or the judge's own score for that reply, and its row order
+is shuffled (seeded) so neither leaks through position either:
 
-1. Fill in the `human_overall` column (1–5) for every row
-2. Save the file as `data/golden/human_scores.csv`
-3. Rerun `python scripts/run_demo.py` (or `python -m eval.human_agreement`
-   directly) — it writes `results/judge_human_agreement.json` and prints
-   Cohen's kappa, Spearman correlation, and per-system breakdowns
+- `results/human_scoring_blind.csv` — the 40 spot-check (message, reply)
+  pairs, shuffled, with an opaque `item_id` (`h01`…`h40`) assigned *after*
+  the shuffle. Columns: `item_id`, `message`, `reply`, `reference`,
+  `human_overall` (blank). This is the file to send out.
+- `results/human_scoring_key.csv` — `item_id`, `pair_id`, `root_id`,
+  `system`. Kept back; **never send this to the rater**, it's exactly what
+  de-anonymizes each row.
+- `results/human_scoring_rubric.md` — the judge's "overall" rubric in
+  plain words, on the same 1–5 scale — send this alongside the blind sheet.
+
+To add a human comparison point:
+
+1. Send `results/human_scoring_blind.csv` and `results/human_scoring_rubric.md`
+   to a human rater (not the key).
+2. Have them fill in the `human_overall` column (1–5) for every row.
+3. Save the filled sheet as `data/golden/human_scores.csv`.
+4. Rerun `python scripts/run_demo.py` (or `python -m eval.human_agreement`
+   directly) — it joins the filled sheet back against
+   `results/human_scoring_key.csv` (by `item_id`) and `results/reply_rows.csv`
+   (by `root_id`+`system`) to re-attach the system and the judge's score,
+   validates every item joined exactly once, then writes
+   `results/judge_human_agreement.json` and prints Cohen's kappa, Spearman
+   correlation, and per-system breakdowns. Per-system agreement (~13 pairs
+   each) is the stricter read — agreement pooled across all three systems
+   is inflated by their quality differences, not just by rater/judge
+   agreement on any single reply.
 
 ## Repo map
 

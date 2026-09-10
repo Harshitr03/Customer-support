@@ -20,7 +20,10 @@ and the ruling list in the task prompt for what overrides it):
      and policy-only (gold intent, confidence=1.0) -- isolating rule-policy
      error from classifier error (`compute_escalation_variant`).
   7. Outputs go to the committed `results/` directory: eval_results.json,
-     classification_rows.csv, reply_rows.csv, human_scoring_template.csv.
+     classification_rows.csv, reply_rows.csv, human_scoring_blind.csv,
+     human_scoring_key.csv, human_scoring_rubric.md (B1: the blind human
+     scoring sheet is split from its de-anonymizing key -- see
+     build_blind_human_scoring).
   8. `--estimate` (`main(estimate_only=True)`) prints planned API-call
      counts without ever calling the network -- see `estimate_calls`.
 """
@@ -156,7 +159,15 @@ def compute_escalation_variant(golden: pd.DataFrame, intents: list, confidences:
 def build_human_scoring_template(spotcheck: pd.DataFrame, reply_rows: pd.DataFrame) -> pd.DataFrame:
     """Ruling 7d: the 40 in_spotcheck rows, one system per row in rotation
     (trivial, nearest, grounded, trivial, ...), for a human to score
-    independently against judge_overall (Task 12: judge/human agreement)."""
+    independently against judge_overall (Task 12: judge/human agreement).
+
+    B1: this selection alone is NOT what gets sent to a human rater anymore
+    -- it carries the system name and the judge's own score, either of
+    which would bias blind scoring. build_blind_human_scoring() below
+    takes this DataFrame and produces the actual blind sheet plus the
+    separate key needed to re-attach that identity afterward. Kept as its
+    own function (rather than inlined) so the deterministic pair-selection
+    logic and the shuffle/blinding step are independently testable."""
     recs = []
     for i, row in enumerate(spotcheck.itertuples()):
         system = REPLY_SYSTEMS[i % len(REPLY_SYSTEMS)]
@@ -172,9 +183,76 @@ def build_human_scoring_template(spotcheck: pd.DataFrame, reply_rows: pd.DataFra
             "reply": m["reply"],
             "reference": m["reference"],
             "judge_overall": m["overall"],
-            "human_overall": "",
         })
     return pd.DataFrame(recs)
+
+
+HUMAN_SCORING_SHUFFLE_SEED = 42
+
+HUMAN_SCORING_RUBRIC_MD = """# Human scoring rubric: reply quality ("overall")
+
+Score each reply from **1 to 5** (the same scale the LLM judge uses) on
+its overall quality as a Spotify customer-support reply. Judge it
+holistically, not as an average of the points below -- they're what to
+look for, not separate sub-scores to add up:
+
+- **Grounded** -- consistent with how Spotify has historically handled
+  similar issues.
+- **Factual** -- makes no invented or unsupported claim about the
+  customer's account or Spotify's product.
+- **Tone** -- empathetic, on-brand, concise.
+- **Actionable** -- gives the customer a concrete next step.
+
+Rough anchors:
+
+- **1** -- poor on most of the above (e.g. off-topic, invents facts, or
+  gives the customer nothing to do).
+- **3** -- adequate, but with a clear gap on at least one point above.
+- **5** -- excellent on all four.
+
+Use your judgment for 2 and 4.
+
+For each row you're given the customer's message and a **reference**: a
+REAL historical Spotify reply sent to that exact customer thread. Treat it
+as a guide to what a good answer looks like for this kind of message --
+not as an answer key the drafted reply has to match verbatim.
+"""
+
+
+def build_blind_human_scoring(spotcheck: pd.DataFrame, reply_rows: pd.DataFrame,
+                               seed: int = HUMAN_SCORING_SHUFFLE_SEED) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """B1: blind human scoring, enforced in code. build_human_scoring_template's
+    40 (root_id, system) pairs are shuffled (seeded, so this is
+    reproducible) and assigned item_ids AFTER the shuffle, so neither the
+    row order nor an item_id gives away which system drafted a reply.
+    Returns (blind_df, key_df):
+
+    - blind_df -- what actually gets sent to a human rater:
+      item_id, message, reply, reference, human_overall (blank). No system
+      name, no judge score.
+    - key_df -- kept back for analysis only, never sent out:
+      item_id, pair_id, root_id, system. eval.human_agreement joins this
+      against the filled-in blind_df (by item_id) to re-attach the system
+      and (via reply_rows.csv) the judge's own score.
+    """
+    pairs = build_human_scoring_template(spotcheck, reply_rows)
+    shuffled = pairs.sample(frac=1, random_state=seed).reset_index(drop=True)
+    item_ids = [f"h{i + 1:02d}" for i in range(len(shuffled))]
+
+    blind_df = pd.DataFrame({
+        "item_id": item_ids,
+        "message": shuffled["message"],
+        "reply": shuffled["reply"],
+        "reference": shuffled["reference"],
+        "human_overall": "",
+    })
+    key_df = pd.DataFrame({
+        "item_id": item_ids,
+        "pair_id": shuffled["pair_id"],
+        "root_id": shuffled["root_id"],
+        "system": shuffled["system"],
+    })
+    return blind_df, key_df
 
 
 # ---------------------------------------------------------------------------
@@ -346,12 +424,18 @@ def _print_estimate(est: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def _write_results(results: dict, classification_rows: pd.DataFrame,
-                    reply_rows: pd.DataFrame, human_template: pd.DataFrame) -> None:
+                    reply_rows: pd.DataFrame, human_blind: pd.DataFrame,
+                    human_key: pd.DataFrame) -> None:
     config.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     (config.RESULTS_DIR / "eval_results.json").write_text(json.dumps(results, indent=2))
     classification_rows.to_csv(config.RESULTS_DIR / "classification_rows.csv", index=False)
     reply_rows.to_csv(config.RESULTS_DIR / "reply_rows.csv", index=False)
-    human_template.to_csv(config.RESULTS_DIR / "human_scoring_template.csv", index=False)
+    # B1: blind_human_scoring.csv (sent to the human rater) and
+    # human_scoring_key.csv (kept back, never sent -- it's what lets
+    # eval.human_agreement re-attach system identity for analysis).
+    human_blind.to_csv(config.RESULTS_DIR / "human_scoring_blind.csv", index=False)
+    human_key.to_csv(config.RESULTS_DIR / "human_scoring_key.csv", index=False)
+    (config.RESULTS_DIR / "human_scoring_rubric.md").write_text(HUMAN_SCORING_RUBRIC_MD)
     logger.info("wrote results to %s", config.RESULTS_DIR)
 
 
@@ -581,9 +665,9 @@ def main(estimate_only: bool = False) -> dict:
     })
 
     spotcheck = subset[subset["in_spotcheck"]].reset_index(drop=True)
-    human_template = build_human_scoring_template(spotcheck, reply_rows)
+    human_blind, human_key = build_blind_human_scoring(spotcheck, reply_rows)
 
-    _write_results(results, classification_rows, reply_rows, human_template)
+    _write_results(results, classification_rows, reply_rows, human_blind, human_key)
     _print_table(results)
     logger.info("full eval run complete in %.1fs", time.monotonic() - t_start)
     return results

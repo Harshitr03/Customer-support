@@ -2,17 +2,27 @@
 
 Task 12: the assignment asks for "evidence of how well your LLM judge agrees
 with a human". This module computes that evidence from
-`data/golden/human_scores.csv`, a file where a human has filled in
-`human_overall` for the same (message, reply) pairs the judge already scored
-in `results/human_scoring_template.csv` (Task 11).
+`data/golden/human_scores.csv`, the filled-in blind scoring sheet (B1):
+a human rater filled in `human_overall` for
+`results/human_scoring_blind.csv`'s 40 (message, reply) pairs, which
+carries neither the drafting system's name nor the judge's own score for
+that pair -- see `results/human_scoring_rubric.md` for the rubric they
+scored against. This module re-attaches that identity from
+`results/human_scoring_key.csv` (which system/root_id each item_id
+actually was) and the judge's own score from `results/reply_rows.csv`,
+purely for analysis; the human never saw either.
 
 Controller rulings applied here (see task-12-brief.md for the base spec,
-and the ruling list in the task prompt for what overrides it):
+and the ruling list in the task prompt for what overrides it), as amended
+by the B1 blind-scoring fix:
 
-  1. Input shape: main() reads the Task-11 human_scoring_template columns
-     (pair_id, root_id, message, system, reply, reference, judge_overall,
-     human_overall) rather than the brief's 2-3 column shape, so
-     per-system agreement is possible. Validated at this boundary.
+  1. Input shape: main() reads the filled blind sheet (item_id, message,
+     reply, reference, human_overall), joins it against
+     results/human_scoring_key.csv (item_id -> pair_id, root_id, system)
+     and results/reply_rows.csv (root_id, system -> judge_overall's
+     "overall" column) -- see join_human_scores(). Every item_id must join
+     exactly once on both sides; validated at this boundary with clear
+     errors, not silently dropped/duplicated rows.
   2. Metrics: agreement() returns n, cohen_kappa_binned (low 1-2 / mid 3 /
      high 4-5), weighted_kappa_quadratic (raw 1-5, quadratic weights),
      spearman, exact_agreement, within_one, mean_human, mean_judge, and
@@ -21,8 +31,13 @@ and the ruling list in the task prompt for what overrides it):
   3. Also: per-system breakdown, a 3x3 binned confusion table, and a
      bootstrap 95% CI for cohen_kappa_binned (1000 paired row resamples,
      seed 42; resamples where kappa is undefined are skipped and counted).
+     Per-system agreement (~13 pairs each) is the stricter read: pooling
+     across three systems of different quality inflates agreement with
+     between-system score spread that has nothing to do with whether the
+     judge and the human actually agree on any one reply -- see the
+     "note" field in the written JSON.
   4. Output: results/judge_human_agreement.json (overall + per-system +
-     confusion + CI) plus a concise printed summary.
+     confusion + CI + note) plus a concise printed summary.
   6. Logging: module logger, INFO summary lines only, never message/reply
      text at INFO+; setup_logging('INFO') only under __main__.
   7. No network/API calls -- none are needed for this task.
@@ -40,12 +55,21 @@ from support_agent import config
 
 logger = logging.getLogger(__name__)
 
-REQUIRED_COLUMNS = ("pair_id", "root_id", "message", "system", "reply",
-                     "reference", "judge_overall", "human_overall")
+REQUIRED_HUMAN_SCORES_COLUMNS = ("item_id", "message", "reply", "reference", "human_overall")
+REQUIRED_KEY_COLUMNS = ("item_id", "pair_id", "root_id", "system")
 BIN_LABELS = ("low", "mid", "high")
 N_BOOTSTRAP = 1000
 BOOTSTRAP_SEED = config.SEED
 _BOOTSTRAP_ALPHA = 0.05
+POOLED_VS_PER_SYSTEM_NOTE = (
+    "Agreement pooled across all three systems (\"overall\" above) is "
+    "inflated relative to any one system's agreement: the three systems "
+    "differ in quality, so the pooled correlation partly reflects the "
+    "judge and the human both noticing that a grounded-generation reply "
+    "beats a canned one, not that they agree on any single reply's score. "
+    "Per-system agreement (~13 pairs each, in \"per_system\" below) is the "
+    "stricter test -- it holds quality roughly constant within each group."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -147,12 +171,13 @@ def bootstrap_kappa_ci(human: list[int], judge: list[int],
 # main(): load, validate, compute, write, print
 # ---------------------------------------------------------------------------
 
-def _validate(df: pd.DataFrame) -> None:
-    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
-    if missing:
-        raise ValueError(
-            f"data/golden/human_scores.csv is missing required column(s): {missing}")
-
+def _validate_scores(df: pd.DataFrame) -> pd.DataFrame:
+    """Validate + coerce the human_overall and judge_overall columns:
+    integers in 1..5, no blanks. Returns df with both columns coerced to
+    int (a column round-tripped through CSV with a blank elsewhere reads
+    back as float64 even where every value is integral, e.g. 4.0). Raises
+    ValueError with a specific message otherwise."""
+    df = df.copy()
     human_col = df["human_overall"]
     blank = human_col.isna()
     if human_col.dtype == object:
@@ -181,28 +206,120 @@ def _validate(df: pd.DataFrame) -> None:
             raise ValueError(
                 f"column {col!r} must be in the 1..5 range, found out-of-range "
                 f"value(s): {bad}")
+    return df
+
+
+def join_human_scores(human_df: pd.DataFrame, key_df: pd.DataFrame,
+                       reply_rows: pd.DataFrame) -> pd.DataFrame:
+    """B1: re-attach the drafting system and the judge's own score to the
+    filled-in blind sheet, purely for analysis -- the human rater saw
+    neither. `human_df` is the filled results/human_scoring_blind.csv
+    (item_id, message, reply, reference, human_overall); `key_df` is
+    results/human_scoring_key.csv (item_id, pair_id, root_id, system);
+    `reply_rows` is results/reply_rows.csv (has root_id, system, and an
+    "overall" column -- the judge's score for that (root_id, system)).
+
+    Every item_id must join exactly once against key_df, and every
+    resulting (root_id, system) must join exactly once against
+    reply_rows -- raises ValueError with the specific mismatch otherwise
+    (never silently drops or duplicates a row). Returns a DataFrame with
+    columns (pair_id, root_id, message, system, reply, reference,
+    judge_overall, human_overall), NOT yet score-range-validated (see
+    _validate_scores)."""
+    missing_cols = [c for c in REQUIRED_HUMAN_SCORES_COLUMNS if c not in human_df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"data/golden/human_scores.csv is missing required column(s): {missing_cols}")
+    missing_key_cols = [c for c in REQUIRED_KEY_COLUMNS if c not in key_df.columns]
+    if missing_key_cols:
+        raise ValueError(
+            f"results/human_scoring_key.csv is missing required column(s): {missing_key_cols}")
+
+    dup_human = human_df.loc[human_df["item_id"].duplicated(), "item_id"].tolist()
+    if dup_human:
+        raise ValueError(
+            f"data/golden/human_scores.csv has duplicate item_id(s): {dup_human}")
+    dup_key = key_df.loc[key_df["item_id"].duplicated(), "item_id"].tolist()
+    if dup_key:
+        raise ValueError(
+            f"results/human_scoring_key.csv has duplicate item_id(s): {dup_key}")
+
+    human_ids, key_ids = set(human_df["item_id"]), set(key_df["item_id"])
+    only_in_human = sorted(human_ids - key_ids)
+    if only_in_human:
+        raise ValueError(
+            "item_id(s) in data/golden/human_scores.csv not found in "
+            f"results/human_scoring_key.csv: {only_in_human}")
+    only_in_key = sorted(key_ids - human_ids)
+    if only_in_key:
+        raise ValueError(
+            "item_id(s) in results/human_scoring_key.csv missing from "
+            "data/golden/human_scores.csv -- every distributed item must "
+            f"come back scored: {only_in_key}")
+
+    merged = human_df.merge(key_df, on="item_id", how="inner")
+    if len(merged) != len(human_df):
+        raise ValueError(
+            "item_id join between data/golden/human_scores.csv and "
+            "results/human_scoring_key.csv was not one-to-one")
+
+    dup_reply_keys = (
+        reply_rows.loc[reply_rows.duplicated(subset=["root_id", "system"]), ["root_id", "system"]]
+        .apply(tuple, axis=1).tolist()
+    )
+    if dup_reply_keys:
+        raise ValueError(
+            f"results/reply_rows.csv has duplicate (root_id, system) row(s): {dup_reply_keys}")
+
+    judge_lookup = reply_rows.set_index(["root_id", "system"])["overall"]
+    keys = list(zip(merged["root_id"], merged["system"]))
+    missing_in_replies = sorted(set(k for k in keys if k not in judge_lookup.index))
+    if missing_in_replies:
+        raise ValueError(
+            f"no results/reply_rows.csv entry for (root_id, system): {missing_in_replies}")
+
+    merged["judge_overall"] = [judge_lookup.loc[k] for k in keys]
+    return merged[["pair_id", "root_id", "message", "system", "reply",
+                    "reference", "judge_overall", "human_overall"]]
 
 
 def load_scores() -> pd.DataFrame | None:
-    """Load and validate data/golden/human_scores.csv. Returns None (after
-    printing how to produce the file) if it doesn't exist yet -- neither the
-    eval run nor the human-scoring pass has happened."""
-    path = config.GOLDEN_DIR / "human_scores.csv"
-    if not path.exists():
+    """Load data/golden/human_scores.csv (the filled-in blind sheet), join
+    it against results/human_scoring_key.csv and results/reply_rows.csv
+    (see join_human_scores), and validate the result. Returns None (after
+    printing how to produce whichever piece is missing) if any of the
+    three required files doesn't exist yet."""
+    human_path = config.GOLDEN_DIR / "human_scores.csv"
+    key_path = config.RESULTS_DIR / "human_scoring_key.csv"
+    reply_rows_path = config.RESULTS_DIR / "reply_rows.csv"
+
+    missing_paths = [p for p in (human_path, key_path, reply_rows_path) if not p.exists()]
+    if missing_paths:
         print(
-            "No data/golden/human_scores.csv found yet. To produce it:\n"
+            "Missing input(s) for judge/human agreement: "
+            + ", ".join(str(p) for p in missing_paths) + ".\n"
+            "To produce them:\n"
             "  1. Run the eval harness -- offline by default (zero API calls,\n"
             "     replays results from data/llm_cache/; pass --live to make real\n"
             "     calls for anything not already cached) -- it writes\n"
-            "     results/human_scoring_template.csv:\n"
+            "     results/reply_rows.csv, results/human_scoring_blind.csv, and\n"
+            "     results/human_scoring_key.csv:\n"
             "       .venv/bin/python -m eval.run_eval\n"
-            "  2. Fill in the human_overall column for every row of that CSV.\n"
-            "  3. Save it as data/golden/human_scores.csv, then re-run this module."
+            "  2. Send results/human_scoring_blind.csv (with\n"
+            "     results/human_scoring_rubric.md) to a human rater -- never send\n"
+            "     results/human_scoring_key.csv, it reveals which system drafted\n"
+            "     each reply.\n"
+            "  3. Have them fill in the human_overall column for every row.\n"
+            "  4. Save the filled sheet as data/golden/human_scores.csv, then "
+            "re-run this module."
         )
         return None
-    df = pd.read_csv(path)
-    _validate(df)
-    return df
+
+    human_df = pd.read_csv(human_path)
+    key_df = pd.read_csv(key_path)
+    reply_rows = pd.read_csv(reply_rows_path)
+    df = join_human_scores(human_df, key_df, reply_rows)
+    return _validate_scores(df)
 
 
 def _nan_to_none(obj):
@@ -272,6 +389,7 @@ def main() -> dict | None:
         "per_system": per_system,
         "confusion": confusion,
         "bootstrap_ci_kappa_binned": ci,
+        "note": POOLED_VS_PER_SYSTEM_NOTE,
     }
     _write_results(results)
     _print_summary(results)

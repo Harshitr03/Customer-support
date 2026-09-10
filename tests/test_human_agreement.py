@@ -111,29 +111,126 @@ def test_bootstrap_kappa_ci_reports_skipped_degenerate_resamples():
 
 
 # ---------------------------------------------------------------------------
-# main() -- validation, per-system grouping, output
+# B1: join_human_scores() -- re-attach system + judge score to the blind
+# sheet, with exactly-once join validation
 # ---------------------------------------------------------------------------
 
-_COLUMNS = ("pair_id", "root_id", "message", "system", "reply", "reference",
-            "judge_overall", "human_overall")
-
-
-def _make_df(n=9):
-    systems = ["trivial", "nearest", "grounded"]
+def _make_human_df(n=9):
     return pd.DataFrame({
-        "pair_id": range(1, n + 1),
-        "root_id": [f"r{i}" for i in range(n)],
+        "item_id": [f"h{i:02d}" for i in range(n)],
         "message": [f"msg {i}" for i in range(n)],
-        "system": [systems[i % 3] for i in range(n)],
         "reply": [f"reply {i}" for i in range(n)],
         "reference": [f"ref {i}" for i in range(n)],
-        "judge_overall": [(i % 5) + 1 for i in range(n)],
         "human_overall": [((i + 1) % 5) + 1 for i in range(n)],
     })
 
 
+def _make_key_df(n=9):
+    systems = ["trivial", "nearest", "grounded"]
+    return pd.DataFrame({
+        "item_id": [f"h{i:02d}" for i in range(n)],
+        "pair_id": range(1, n + 1),
+        "root_id": [f"r{i}" for i in range(n)],
+        "system": [systems[i % 3] for i in range(n)],
+    })
+
+
+def _make_reply_rows_df(n=9):
+    systems = ["trivial", "nearest", "grounded"]
+    return pd.DataFrame({
+        "root_id": [f"r{i}" for i in range(n)],
+        "system": [systems[i % 3] for i in range(n)],
+        "overall": [(i % 5) + 1 for i in range(n)],
+    })
+
+
+def test_join_human_scores_reattaches_system_and_judge_score():
+    n = 9
+    human_df, key_df, reply_rows = _make_human_df(n), _make_key_df(n), _make_reply_rows_df(n)
+    df = ha.join_human_scores(human_df, key_df, reply_rows)
+    assert set(df.columns) == {"pair_id", "root_id", "message", "system",
+                                "reply", "reference", "judge_overall", "human_overall"}
+    assert len(df) == n
+    assert set(df["system"]) == {"trivial", "nearest", "grounded"}
+    # row 0: item_id h00 -> root_id r0 -> reply_rows overall for (r0, trivial)
+    row0 = df[df["root_id"] == "r0"].iloc[0]
+    assert row0["judge_overall"] == 1  # (0 % 5) + 1
+
+
+def test_join_human_scores_shuffled_order_still_joins_correctly():
+    # The blind sheet is shuffled relative to the key/reply_rows -- the join
+    # must be by item_id, not by row position.
+    human_df = _make_human_df(3).iloc[[2, 0, 1]].reset_index(drop=True)
+    key_df, reply_rows = _make_key_df(3), _make_reply_rows_df(3)
+    df = ha.join_human_scores(human_df, key_df, reply_rows)
+    row = df[df["message"] == "msg 2"].iloc[0]
+    assert row["root_id"] == "r2"
+
+
+def test_join_human_scores_raises_on_missing_human_column():
+    human_df = _make_human_df(3).drop(columns=["reference"])
+    with pytest.raises(ValueError, match="reference"):
+        ha.join_human_scores(human_df, _make_key_df(3), _make_reply_rows_df(3))
+
+
+def test_join_human_scores_raises_on_item_id_not_in_key():
+    human_df = _make_human_df(3)
+    human_df.loc[0, "item_id"] = "h99"
+    with pytest.raises(ValueError, match="h99"):
+        ha.join_human_scores(human_df, _make_key_df(3), _make_reply_rows_df(3))
+
+
+def test_join_human_scores_raises_on_key_item_missing_from_human_scores():
+    key_df = _make_key_df(3)
+    key_df.loc[3] = {"item_id": "h99", "pair_id": 4, "root_id": "r99", "system": "trivial"}
+    with pytest.raises(ValueError, match="h99"):
+        ha.join_human_scores(_make_human_df(3), key_df, _make_reply_rows_df(3))
+
+
+def test_join_human_scores_raises_on_duplicate_item_id_in_human_scores():
+    human_df = _make_human_df(3)
+    human_df.loc[2, "item_id"] = human_df.loc[0, "item_id"]  # duplicate h00
+    with pytest.raises(ValueError, match="duplicate item_id"):
+        ha.join_human_scores(human_df, _make_key_df(3), _make_reply_rows_df(3))
+
+
+def test_join_human_scores_raises_on_missing_reply_rows_entry():
+    reply_rows = _make_reply_rows_df(3)
+    reply_rows = reply_rows[reply_rows["root_id"] != "r0"]  # drop r0's judge score
+    with pytest.raises(ValueError, match="r0"):
+        ha.join_human_scores(_make_human_df(3), _make_key_df(3), reply_rows)
+
+
+def test_join_human_scores_raises_on_duplicate_reply_rows_key():
+    reply_rows = _make_reply_rows_df(3)
+    dup = reply_rows.iloc[[0]].copy()
+    reply_rows = pd.concat([reply_rows, dup], ignore_index=True)
+    with pytest.raises(ValueError, match="duplicate"):
+        ha.join_human_scores(_make_human_df(3), _make_key_df(3), reply_rows)
+
+
+# ---------------------------------------------------------------------------
+# main() -- file I/O, validation, per-system grouping, output
+# ---------------------------------------------------------------------------
+
+def _write_blind_inputs(tmp_path, n=9, human_overall=None):
+    golden_dir = tmp_path / "golden"
+    results_dir = tmp_path / "results"
+    golden_dir.mkdir()
+    results_dir.mkdir()
+
+    human_df = _make_human_df(n)
+    if human_overall is not None:
+        human_df["human_overall"] = human_overall
+    human_df.to_csv(golden_dir / "human_scores.csv", index=False)
+    _make_key_df(n).to_csv(results_dir / "human_scoring_key.csv", index=False)
+    _make_reply_rows_df(n).to_csv(results_dir / "reply_rows.csv", index=False)
+    return golden_dir, results_dir
+
+
 def test_main_missing_file_returns_none(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(ha.config, "GOLDEN_DIR", tmp_path)
+    monkeypatch.setattr(ha.config, "RESULTS_DIR", tmp_path / "results")
     result = ha.main()
     assert result is None
     out = capsys.readouterr().out
@@ -142,11 +239,7 @@ def test_main_missing_file_returns_none(tmp_path, monkeypatch, capsys):
 
 
 def test_main_full_run_writes_json_with_per_system_and_confusion(tmp_path, monkeypatch):
-    df = _make_df(n=9)
-    golden_dir = tmp_path / "golden"
-    golden_dir.mkdir()
-    df.to_csv(golden_dir / "human_scores.csv", index=False)
-    results_dir = tmp_path / "results"
+    golden_dir, results_dir = _write_blind_inputs(tmp_path, n=9)
 
     monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
     monkeypatch.setattr(ha.config, "RESULTS_DIR", results_dir)
@@ -155,11 +248,13 @@ def test_main_full_run_writes_json_with_per_system_and_confusion(tmp_path, monke
     result = ha.main()
 
     assert result is not None
-    assert set(result.keys()) >= {"overall", "per_system", "confusion", "bootstrap_ci_kappa_binned"}
+    assert set(result.keys()) >= {"overall", "per_system", "confusion",
+                                   "bootstrap_ci_kappa_binned", "note"}
     assert result["overall"]["n"] == 9
     assert set(result["per_system"].keys()) == {"trivial", "nearest", "grounded"}
     for sys_metrics in result["per_system"].values():
         assert sys_metrics["n"] == 3
+    assert "per-system" in result["note"].lower() or "per_system" in result["note"].lower()
 
     out_path = results_dir / "judge_human_agreement.json"
     assert out_path.exists()
@@ -168,41 +263,37 @@ def test_main_full_run_writes_json_with_per_system_and_confusion(tmp_path, monke
 
 
 def test_main_raises_clear_error_on_blank_human_score(tmp_path, monkeypatch):
-    df = _make_df(n=5)
-    df["human_overall"] = df["human_overall"].astype(float)
-    df.loc[2, "human_overall"] = float("nan")
-    golden_dir = tmp_path / "golden"
-    golden_dir.mkdir()
-    df.to_csv(golden_dir / "human_scores.csv", index=False)
+    scores = [((i + 1) % 5) + 1 for i in range(5)]
+    scores = [float(s) for s in scores]
+    scores[2] = float("nan")
+    golden_dir, results_dir = _write_blind_inputs(tmp_path, n=5, human_overall=scores)
 
     monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
+    monkeypatch.setattr(ha.config, "RESULTS_DIR", results_dir)
 
     with pytest.raises(ValueError, match=r"1 row"):
         ha.main()
 
 
 def test_main_raises_on_out_of_range_score(tmp_path, monkeypatch):
-    df = _make_df(n=5)
-    df.loc[0, "human_overall"] = 7
-    golden_dir = tmp_path / "golden"
-    golden_dir.mkdir()
-    df.to_csv(golden_dir / "human_scores.csv", index=False)
+    scores = [((i + 1) % 5) + 1 for i in range(5)]
+    scores[0] = 7
+    golden_dir, results_dir = _write_blind_inputs(tmp_path, n=5, human_overall=scores)
 
     monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
+    monkeypatch.setattr(ha.config, "RESULTS_DIR", results_dir)
 
     with pytest.raises(ValueError, match=r"1\.\.5|1-5|range"):
         ha.main()
 
 
 def test_main_raises_on_non_integer_human_score(tmp_path, monkeypatch):
-    df = _make_df(n=5)
-    df["human_overall"] = df["human_overall"].astype(float)
-    df.loc[1, "human_overall"] = 3.5
-    golden_dir = tmp_path / "golden"
-    golden_dir.mkdir()
-    df.to_csv(golden_dir / "human_scores.csv", index=False)
+    scores = [float(((i + 1) % 5) + 1) for i in range(5)]
+    scores[1] = 3.5
+    golden_dir, results_dir = _write_blind_inputs(tmp_path, n=5, human_overall=scores)
 
     monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
+    monkeypatch.setattr(ha.config, "RESULTS_DIR", results_dir)
 
     with pytest.raises(ValueError, match=r"integer"):
         ha.main()
@@ -212,12 +303,8 @@ def test_main_accepts_integral_float_human_score(tmp_path, monkeypatch):
     # A column that had a blank elsewhere in the raw CSV gets read back by
     # pandas as float64 even for the fully-populated rows (e.g. 4.0 instead
     # of 4) -- that's still a valid integer score and must be accepted.
-    df = _make_df(n=5)
-    df["human_overall"] = df["human_overall"].astype(float)
-    golden_dir = tmp_path / "golden"
-    golden_dir.mkdir()
-    df.to_csv(golden_dir / "human_scores.csv", index=False)
-    results_dir = tmp_path / "results"
+    scores = [float(((i + 1) % 5) + 1) for i in range(5)]
+    golden_dir, results_dir = _write_blind_inputs(tmp_path, n=5, human_overall=scores)
 
     monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
     monkeypatch.setattr(ha.config, "RESULTS_DIR", results_dir)
@@ -232,21 +319,28 @@ def test_written_json_has_no_bare_nan_for_degenerate_group(tmp_path, monkeypatch
     # that per-system group (plausible with ~13 rows/system in the real
     # data). The written JSON must be strict-parser-safe: no bare NaN token.
     n = 9
-    systems = ["trivial"] * 3 + ["nearest"] * 3 + ["grounded"] * 3
-    df = pd.DataFrame({
-        "pair_id": range(1, n + 1),
-        "root_id": [f"r{i}" for i in range(n)],
-        "message": [f"msg {i}" for i in range(n)],
-        "system": systems,
-        "reply": [f"reply {i}" for i in range(n)],
-        "reference": [f"ref {i}" for i in range(n)],
-        "judge_overall": [3, 3, 3] + [(i % 5) + 1 for i in range(6)],
-        "human_overall": [3, 3, 3] + [((i + 1) % 5) + 1 for i in range(6)],
-    })
     golden_dir = tmp_path / "golden"
-    golden_dir.mkdir()
-    df.to_csv(golden_dir / "human_scores.csv", index=False)
     results_dir = tmp_path / "results"
+    golden_dir.mkdir()
+    results_dir.mkdir()
+
+    # first 3 items all belong to "trivial" (not the round-robin rotation
+    # _make_key_df uses), so their degenerate all-3 scores actually land in
+    # one system group instead of being spread across all three.
+    systems = ["trivial"] * 3 + ["nearest"] * 3 + ["grounded"] * 3
+
+    human_df = _make_human_df(n)
+    human_df["human_overall"] = [3, 3, 3] + [((i + 1) % 5) + 1 for i in range(6)]
+    human_df.to_csv(golden_dir / "human_scores.csv", index=False)
+
+    key_df = _make_key_df(n)
+    key_df["system"] = systems
+    key_df.to_csv(results_dir / "human_scoring_key.csv", index=False)
+
+    reply_rows = _make_reply_rows_df(n)
+    reply_rows["system"] = systems
+    reply_rows["overall"] = [3, 3, 3] + [(i % 5) + 1 for i in range(6)]
+    reply_rows.to_csv(results_dir / "reply_rows.csv", index=False)
 
     monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
     monkeypatch.setattr(ha.config, "RESULTS_DIR", results_dir)
@@ -267,12 +361,16 @@ def test_written_json_has_no_bare_nan_for_degenerate_group(tmp_path, monkeypatch
 
 
 def test_main_raises_on_missing_column(tmp_path, monkeypatch):
-    df = _make_df(n=5).drop(columns=["reference"])
     golden_dir = tmp_path / "golden"
+    results_dir = tmp_path / "results"
     golden_dir.mkdir()
-    df.to_csv(golden_dir / "human_scores.csv", index=False)
+    results_dir.mkdir()
+    _make_human_df(5).drop(columns=["reference"]).to_csv(golden_dir / "human_scores.csv", index=False)
+    _make_key_df(5).to_csv(results_dir / "human_scoring_key.csv", index=False)
+    _make_reply_rows_df(5).to_csv(results_dir / "reply_rows.csv", index=False)
 
     monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
+    monkeypatch.setattr(ha.config, "RESULTS_DIR", results_dir)
 
     with pytest.raises(ValueError, match="reference"):
         ha.main()
