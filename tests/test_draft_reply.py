@@ -47,7 +47,9 @@ def test_clean_reply_strips_tco_link():
     text = "We'll take a look backstage /CH https://t.co/ldFdZRiNAt"
     cleaned = dr.clean_reply(text)
     assert "t.co" not in cleaned
-    assert "backstage /CH" in cleaned
+    # the trailing "/CH" sign-off (now right at the end, after the link is
+    # stripped) is also removed -- see test_clean_reply_strips_signoff below.
+    assert cleaned == "We'll take a look backstage"
 
 
 def test_clean_reply_leaves_plain_text_unchanged():
@@ -95,3 +97,50 @@ def test_grounded_prompt_instructs_no_urls_or_handles(monkeypatch):
     dr.grounded_reply("app crashes", "technical_bug", examples=[
         {"customer_open": "crash", "spotify_reply": "reinstall", "score": 1.0}])
     assert "URLs" in captured["prompt"] and "@handles" in captured["prompt"]
+
+
+# --- A1: no synthetic "^S" signature; strip real agent-initials sign-offs --
+
+def test_canned_replies_have_no_synthetic_signature():
+    for intent, text in dr.CANNED.items():
+        assert "^S" not in text, f"{intent} still has the synthetic ^S signature"
+
+
+def test_grounded_prompt_does_not_ask_for_a_signature():
+    assert "signature" not in dr._GEN_PROMPT.lower()
+    assert "^S" not in dr._GEN_PROMPT
+
+
+def test_clean_reply_strips_signoff():
+    text = "Thanks for reaching out, we'll take a look /LS"
+    assert dr.clean_reply(text) == "Thanks for reaching out, we'll take a look"
+
+
+def test_clean_reply_strips_single_letter_signoff():
+    text = "Give it a try and let us know /K"
+    assert dr.clean_reply(text) == "Give it a try and let us know"
+
+
+def test_clean_reply_preserves_24_7():
+    text = "We're here for you 24/7, just ask."
+    assert dr.clean_reply(text) == text
+
+
+def test_clean_reply_preserves_and_or():
+    text = "Try disabling and/or reinstalling the app."
+    assert dr.clean_reply(text) == text
+
+
+def test_clean_reply_preserves_mid_text_slash_not_at_end():
+    text = "Log out and/or restart, then check for an update /RS"
+    cleaned = dr.clean_reply(text)
+    assert "and/or restart" in cleaned
+    assert "/RS" not in cleaned
+
+
+def test_grounded_reply_output_is_cleaned(monkeypatch):
+    monkeypatch.setattr(dr.llm_client, "generate",
+        lambda prompt, **k: "@115887 Please try reinstalling /LS https://t.co/abc123")
+    out = dr.grounded_reply("app crashes", "technical_bug",
+                             examples=[{"customer_open": "x", "spotify_reply": "y", "score": 1.0}])
+    assert out == "Please try reinstalling"
