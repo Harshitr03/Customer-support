@@ -1,0 +1,24 @@
+# raw dataset (download separately, see README)
+archive.zip
+twcs/
+sample.csv
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# env / secrets
+.env
+.env.*
+
+# generated artifacts (reproducible via pipeline, kept out of git except curated ones under data/golden)
+data/raw/
+data/interim/
+data/cache/
+*.log
+
+# os
+.DS_Store
