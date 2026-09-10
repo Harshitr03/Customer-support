@@ -194,6 +194,78 @@ def test_main_raises_on_out_of_range_score(tmp_path, monkeypatch):
         ha.main()
 
 
+def test_main_raises_on_non_integer_human_score(tmp_path, monkeypatch):
+    df = _make_df(n=5)
+    df["human_overall"] = df["human_overall"].astype(float)
+    df.loc[1, "human_overall"] = 3.5
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    df.to_csv(golden_dir / "human_scores.csv", index=False)
+
+    monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
+
+    with pytest.raises(ValueError, match=r"integer"):
+        ha.main()
+
+
+def test_main_accepts_integral_float_human_score(tmp_path, monkeypatch):
+    # A column that had a blank elsewhere in the raw CSV gets read back by
+    # pandas as float64 even for the fully-populated rows (e.g. 4.0 instead
+    # of 4) -- that's still a valid integer score and must be accepted.
+    df = _make_df(n=5)
+    df["human_overall"] = df["human_overall"].astype(float)
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    df.to_csv(golden_dir / "human_scores.csv", index=False)
+    results_dir = tmp_path / "results"
+
+    monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
+    monkeypatch.setattr(ha.config, "RESULTS_DIR", results_dir)
+
+    result = ha.main()
+    assert result is not None
+    assert result["overall"]["n"] == 5
+
+
+def test_written_json_has_no_bare_nan_for_degenerate_group(tmp_path, monkeypatch):
+    # A system whose scores are all identical produces NaN kappa/spearman for
+    # that per-system group (plausible with ~13 rows/system in the real
+    # data). The written JSON must be strict-parser-safe: no bare NaN token.
+    n = 9
+    systems = ["trivial"] * 3 + ["nearest"] * 3 + ["grounded"] * 3
+    df = pd.DataFrame({
+        "pair_id": range(1, n + 1),
+        "root_id": [f"r{i}" for i in range(n)],
+        "message": [f"msg {i}" for i in range(n)],
+        "system": systems,
+        "reply": [f"reply {i}" for i in range(n)],
+        "reference": [f"ref {i}" for i in range(n)],
+        "judge_overall": [3, 3, 3] + [(i % 5) + 1 for i in range(6)],
+        "human_overall": [3, 3, 3] + [((i + 1) % 5) + 1 for i in range(6)],
+    })
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    df.to_csv(golden_dir / "human_scores.csv", index=False)
+    results_dir = tmp_path / "results"
+
+    monkeypatch.setattr(ha.config, "GOLDEN_DIR", golden_dir)
+    monkeypatch.setattr(ha.config, "RESULTS_DIR", results_dir)
+    monkeypatch.setattr(ha, "N_BOOTSTRAP", 20)
+
+    result = ha.main()
+    # sanity: the degenerate group really does produce NaN in-memory
+    trivial_kappa = result["per_system"]["trivial"]["cohen_kappa_binned"]
+    assert trivial_kappa != trivial_kappa  # NaN
+
+    text = (results_dir / "judge_human_agreement.json").read_text()
+
+    def _reject_constant(token):
+        raise ValueError(f"strict JSON parser rejects bare constant: {token}")
+
+    parsed = json.loads(text, parse_constant=_reject_constant)
+    assert parsed["per_system"]["trivial"]["cohen_kappa_binned"] is None
+
+
 def test_main_raises_on_missing_column(tmp_path, monkeypatch):
     df = _make_df(n=5).drop(columns=["reference"])
     golden_dir = tmp_path / "golden"

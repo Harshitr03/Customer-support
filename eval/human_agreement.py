@@ -44,7 +44,7 @@ REQUIRED_COLUMNS = ("pair_id", "root_id", "message", "system", "reply",
                      "reference", "judge_overall", "human_overall")
 BIN_LABELS = ("low", "mid", "high")
 N_BOOTSTRAP = 1000
-BOOTSTRAP_SEED = 42
+BOOTSTRAP_SEED = config.SEED
 _BOOTSTRAP_ALPHA = 0.05
 
 
@@ -165,9 +165,17 @@ def _validate(df: pd.DataFrame) -> None:
 
     for col in ("human_overall", "judge_overall"):
         try:
-            df[col] = df[col].astype(int)
+            numeric = pd.to_numeric(df[col])
         except (ValueError, TypeError) as exc:
             raise ValueError(f"column {col!r} must contain integers: {exc}") from exc
+
+        non_integer = numeric[numeric % 1 != 0]
+        if len(non_integer):
+            raise ValueError(
+                f"column {col!r} must contain only integer scores, found "
+                f"{len(non_integer)} non-integer value(s): {non_integer.tolist()}")
+
+        df[col] = numeric.astype(int)
         bad = df.loc[~df[col].between(1, 5), col].tolist()
         if bad:
             raise ValueError(
@@ -194,10 +202,25 @@ def load_scores() -> pd.DataFrame | None:
     return df
 
 
+def _nan_to_none(obj):
+    """Recursively replace float('nan') with None so json.dumps(allow_nan=False)
+    produces strict, parser-portable JSON (`null`) instead of the bare `NaN`
+    token that Python's json module would otherwise emit -- degenerate groups
+    (e.g. a system where every score is identical) legitimately produce NaN
+    metrics, and strict JSON parsers reject that token."""
+    if isinstance(obj, float) and obj != obj:  # NaN
+        return None
+    if isinstance(obj, dict):
+        return {k: _nan_to_none(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_nan_to_none(v) for v in obj]
+    return obj
+
+
 def _write_results(results: dict) -> None:
     config.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = config.RESULTS_DIR / "judge_human_agreement.json"
-    out_path.write_text(json.dumps(results, indent=2))
+    out_path.write_text(json.dumps(_nan_to_none(results), indent=2, allow_nan=False))
     logger.info("wrote judge/human agreement results to %s", out_path)
 
 
