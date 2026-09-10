@@ -15,7 +15,7 @@ venv/
 .env.*
 
 # generated artifacts (reproducible via pipeline, kept out of git except curated ones under data/golden)
-data/raw/
+data/raw
 data/interim/
 data/cache/
 *.log
