@@ -50,3 +50,17 @@ dedicated intent per the brief's guidance (revise only for clusters that
 are large and systematically miscategorized).
 
 **Source of truth:** `src/support_agent/taxonomy.py`.
+
+## Task 3 fix — billing_subscription / cancellation_refund boundary (2026-09-10)
+
+Code review flagged that `billing_subscription` ("unexpected/duplicate
+charges") and `cancellation_refund` ("request a refund for a charge")
+overlapped on charge-driven refund requests (e.g. "I was charged twice,
+refund me"), with no rule to say which wins. Added an explicit
+primary-ask rule to both definitions in `taxonomy.py`: if the customer
+asks to cancel, get a refund, or get money back, classify as
+`cancellation_refund` even if a charge is mentioned; `billing_subscription`
+is only for charge/payment/plan problems where no cancellation or refund
+is requested. Also tightened `feature_complaint` vs. `technical_bug` with
+one clause (malfunctioning app vs. working-as-designed-but-disliked/missing
+capability).

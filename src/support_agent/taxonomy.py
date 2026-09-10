@@ -29,22 +29,31 @@ INTENTS: list[Intent] = [
          "someone else is logging into my account and playing music")),
     Intent("billing_subscription",
         "Charges, payment methods, Premium not active after paying, unexpected/duplicate charges, "
-        "plan changes (monthly/yearly/family), regional pricing/currency confusion.",
-        ("I was charged twice for Premium this month",
-         "paid for Premium but still seeing ads",
-         "I'm being charged in the wrong currency for my country")),
+        "plan changes (monthly/yearly/family), regional pricing/currency confusion. Classify by "
+        "the customer's primary ask: if they ask to cancel, get a refund, or get their money "
+        "back, use cancellation_refund even if a charge is mentioned; use billing_subscription "
+        "only when no cancellation or refund is requested.",
+        ("paid for Premium but still seeing ads",
+         "why was I charged twice, I didn't request anything",
+         "I'm being charged in the wrong currency for my country",
+         "my card got declined but I have funds")),
     Intent("content_catalog",
         "Missing/removed songs, albums, podcasts, wrong metadata, regional availability of content.",
         ("why did my favorite album disappear",
          "this podcast isn't available in my country",
          "a song's title is showing up wrong in the app")),
     Intent("cancellation_refund",
-        "Wants to cancel Premium or request a refund for a charge.",
+        "Wants to cancel Premium or get a refund/money back for a charge. Applies whenever "
+        "cancelling or refunding is the customer's primary ask, even if a charge or billing "
+        "issue is mentioned as the reason (e.g. 'I was charged twice, refund me').",
         ("how do I cancel my subscription",
-         "I want a refund for last month")),
+         "I want a refund for last month",
+         "I was charged twice for Premium, refund me")),
     Intent("feature_complaint",
         "Dislikes a feature/UX change, shuffle behavior, recommendations, or requests a new "
-        "feature; general feedback/complaint about the product.",
+        "feature; general feedback/complaint about the product. Distinguish from technical_bug "
+        "by whether the app is malfunctioning (technical_bug) versus working as designed but "
+        "disliked, or missing a capability the customer wants added (feature_complaint).",
         ("the new shuffle is terrible",
          "bring back the old playlist UI",
          "please add an alarm clock feature to the app")),
