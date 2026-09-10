@@ -38,7 +38,7 @@ CACHE_DIR = DATA_DIR / "cache"
 REPLAY_CACHE_DIR = DATA_DIR / "llm_cache"
 KB_DIR = DATA_DIR / "kb"
 GOLDEN_DIR = DATA_DIR / "golden"
-# Committed eval-harness outputs (Task 11). NOT included in ensure_dirs()'s
+# Committed eval-harness outputs. NOT included in ensure_dirs()'s
 # generated-artifact list -- it's created lazily, only by a real eval run
 # (eval/run_eval.py writing results), never as a side effect of import or of
 # --estimate (which performs no writes at all).

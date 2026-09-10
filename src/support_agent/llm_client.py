@@ -25,7 +25,7 @@ _RETRY_DELAY_CAP_S = 120.0
 # calls too, not just within one.
 _last_embed_batch_at: float | None = None
 
-# Task 13: every cache filename this process has read (cache or replay hit)
+# Every cache filename this process has read (cache or replay hit)
 # or written, for `touched_cache_files()` / `export_touched_cache()`.
 _touched_files: set[str] = set()
 

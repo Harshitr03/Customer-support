@@ -2,8 +2,7 @@
 metrics over the hand-labeled golden set, plus a network-free --estimate
 mode that reports exactly how many API calls a real run would make.
 
-Controller rulings applied here (see task-11-brief.md for the full spec,
-and the ruling list in the task prompt for what overrides it):
+Design decisions worth calling out:
 
   1. The trivial classifier baseline is fit on corpus weak labels
      (`fit_trivial_on_corpus`), never on the golden test labels.
@@ -21,12 +20,13 @@ and the ruling list in the task prompt for what overrides it):
      error from classifier error (`compute_escalation_variant`).
   7. Outputs go to the committed `results/` directory: eval_results.json,
      classification_rows.csv, reply_rows.csv, human_scoring_blind.csv,
-     human_scoring_key.csv, human_scoring_rubric.md (B1: the blind human
-     scoring sheet is split from its de-anonymizing key -- see
-     build_blind_human_scoring).
+     human_scoring_key.csv, human_scoring_rubric.md -- the blind human
+     scoring sheet is deliberately split from its de-anonymizing key, see
+     build_blind_human_scoring.
   8. `--estimate` (`main(estimate_only=True)`) prints planned API-call
      counts without ever calling the network -- see `estimate_calls`.
 """
+import hashlib
 import json
 import logging
 import os
@@ -85,7 +85,7 @@ def escalation_metrics(y_true, y_pred) -> dict:
         "recall": float(recall_score(y_true, y_pred, zero_division=0)),
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "tp": tp, "fp": fp, "fn": fn, "tn": tn,
-        # B2: share of rows this variant escalates -- lets always_escalate
+        # share of rows this variant escalates -- lets always_escalate
         # (rate 1.0) and never_escalate (rate 0.0) be compared to the
         # actual/gold rate at a glance, alongside precision/recall.
         "escalate_rate": float(np.mean(y_pred)) if y_pred else float("nan"),
@@ -105,6 +105,38 @@ def bootstrap_ci(statistic_fn, n: int, n_boot: int = N_BOOTSTRAP, seed: int = BO
 
 
 # ---------------------------------------------------------------------------
+# Fingerprint: sha256 of everything that determines a real run's output, so
+# drift between the committed replay cache and the current code/data is
+# visible in eval_results.json's metadata instead of silent.
+# ---------------------------------------------------------------------------
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _sha256_file(path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def compute_fingerprint() -> dict:
+    """Sha256 hashes of the prompt templates, the CANNED replies, and the
+    two data files that a real run's output depends on. If any of these
+    ever differs from what a committed replay cache was produced against,
+    that cache may be silently stale -- these hashes make the drift
+    checkable instead of invisible. GEN_MODEL/EMBED_MODEL/KB_SIZE are
+    reported separately in metadata (they're plain strings/ints, not worth
+    hashing)."""
+    return {
+        "classify_prompt_sha256": _sha256_text(classify._CLS_PROMPT),
+        "grounded_prompt_sha256": _sha256_text(draft_reply._GEN_PROMPT),
+        "judge_prompt_sha256": _sha256_text(_JUDGE_RUBRIC),
+        "canned_replies_sha256": _sha256_text(json.dumps(draft_reply.CANNED, sort_keys=True)),
+        "kb_meta_sha256": _sha256_file(config.KB_DIR / "kb_meta.parquet"),
+        "golden_eval_sha256": _sha256_file(config.GOLDEN_DIR / "golden_eval.csv"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Data prep helpers
 # ---------------------------------------------------------------------------
 
@@ -113,7 +145,7 @@ def load_golden() -> pd.DataFrame:
 
 
 def select_reply_subset(golden: pd.DataFrame, n_extra: int | None = None) -> pd.DataFrame:
-    """Ruling 3: all in_spotcheck rows + the first `n_extra` non-spotcheck
+    """All in_spotcheck rows + the first `n_extra` non-spotcheck
     rows in original file order. Returned in original file order.
 
     n_extra defaults to the module-level N_EXTRA_NONSPOTCHECK, read at call
@@ -128,7 +160,7 @@ def select_reply_subset(golden: pd.DataFrame, n_extra: int | None = None) -> pd.
 
 
 def build_reference_map(golden: pd.DataFrame, eval_df: pd.DataFrame) -> dict:
-    """Ruling 2: the judge reference is the real Spotify reply from the
+    """The judge reference is the real Spotify reply from the
     golden message's own thread, joined by root_id -- never a
     nearest-neighbor retrieval result."""
     merged = golden[["root_id"]].merge(
@@ -142,7 +174,7 @@ def build_reference_map(golden: pd.DataFrame, eval_df: pd.DataFrame) -> dict:
 
 
 def fit_trivial_on_corpus(corpus: pd.DataFrame):
-    """Ruling 1: fit the trivial baseline on corpus weak labels, never on
+    """Fit the trivial baseline on corpus weak labels, never on
     the golden test labels (fitting on test labels would leak the test set
     into the baseline)."""
     weak = [weak_labels.weak_label(t) for t in corpus["customer_open"]]
@@ -161,11 +193,11 @@ def compute_escalation_variant(golden: pd.DataFrame, intents: list, confidences:
 
 
 def build_human_scoring_template(spotcheck: pd.DataFrame, reply_rows: pd.DataFrame) -> pd.DataFrame:
-    """Ruling 7d: the 40 in_spotcheck rows, one system per row in rotation
+    """The 40 in_spotcheck rows, one system per row in rotation
     (trivial, nearest, grounded, trivial, ...), for a human to score
-    independently against judge_overall (Task 12: judge/human agreement).
+    independently against judge_overall.
 
-    B1: this selection alone is NOT what gets sent to a human rater anymore
+    This selection alone is NOT what gets sent to a human rater anymore
     -- it carries the system name and the judge's own score, either of
     which would bias blind scoring. build_blind_human_scoring() below
     takes this DataFrame and produces the actual blind sheet plus the
@@ -225,7 +257,7 @@ not as an answer key the drafted reply has to match verbatim.
 
 def build_blind_human_scoring(spotcheck: pd.DataFrame, reply_rows: pd.DataFrame,
                                seed: int = HUMAN_SCORING_SHUFFLE_SEED) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """B1: blind human scoring, enforced in code. build_human_scoring_template's
+    """Blind human scoring, enforced in code. build_human_scoring_template's
     40 (root_id, system) pairs are shuffled (seeded, so this is
     reproducible) and assigned item_ids AFTER the shuffle, so neither the
     row order nor an item_id gives away which system drafted a reply.
@@ -343,7 +375,7 @@ def _is_judge_cached(message: str, reply: str, reference: str) -> bool:
 def estimate_calls(golden: pd.DataFrame, eval_df: pd.DataFrame) -> dict:
     """Plan the API calls a real run would make, counting exactly how many
     are already cached wherever that's cheaply provable, without ever
-    calling the network. See module docstring, ruling 8."""
+    calling the network. See module docstring, decision 8."""
     messages = golden["message"].tolist()
     n_classify_cached = sum(1 for m in messages if _is_gen_cached(_classify_cache_key(m)))
     classification = {
@@ -434,7 +466,7 @@ def _write_results(results: dict, classification_rows: pd.DataFrame,
     (config.RESULTS_DIR / "eval_results.json").write_text(json.dumps(results, indent=2))
     classification_rows.to_csv(config.RESULTS_DIR / "classification_rows.csv", index=False)
     reply_rows.to_csv(config.RESULTS_DIR / "reply_rows.csv", index=False)
-    # B1: blind_human_scoring.csv (sent to the human rater) and
+    # blind_human_scoring.csv (sent to the human rater) and
     # human_scoring_key.csv (kept back, never sent -- it's what lets
     # eval.human_agreement re-attach system identity for analysis).
     human_blind.to_csv(config.RESULTS_DIR / "human_scoring_blind.csv", index=False)
@@ -484,7 +516,7 @@ def main(estimate_only: bool = False) -> dict:
         logger.info("estimate complete in %.2fs, no network calls made", time.monotonic() - t_start)
         return est
 
-    # --- classify once, reuse everywhere (ruling 5) ---------------------
+    # --- classify once, reuse everywhere (decision 5) --------------------
     t0 = time.monotonic()
     messages = golden["message"].tolist()
     root_ids = golden["root_id"].tolist()
@@ -513,12 +545,12 @@ def main(estimate_only: bool = False) -> dict:
                 classification["trivial"]["accuracy"], classification["simple_tfidf"]["accuracy"],
                 classification["llm"]["accuracy"])
 
-    # --- escalation, twice (ruling 6) plus baselines (B2) ------------------
+    # --- escalation, twice (decision 6), plus baselines ------------------
     gold_escalate = golden["gold_escalate"].astype(bool).tolist()
     e2e_pred, e2e_reason = compute_escalation_variant(golden, pred_intents, pred_confs)
     policy_pred, policy_reason = compute_escalation_variant(
         golden, y_true, [1.0] * len(golden))
-    # B2: trivial baselines (no model at all) and a simple_tfidf variant
+    # trivial baselines (no model at all) and a simple_tfidf variant
     # (decide() fed the cheap TF-IDF classifier's prediction, confidence
     # pinned to 1.0 -- mirrors policy_only's confidence handling) so
     # end-to-end's precision/recall/rate has something to be better than.
@@ -541,14 +573,14 @@ def main(estimate_only: bool = False) -> dict:
                 escalation["gold_escalate_rate"], escalation["always_escalate"]["escalate_rate"],
                 escalation["never_escalate"]["escalate_rate"], escalation["simple_tfidf"]["escalate_rate"])
 
-    # --- reply-quality subset (ruling 3, 4) -------------------------------
+    # --- reply-quality subset (decisions 3, 4) ----------------------------
     subset = select_reply_subset(golden)
     root_to_pred = dict(zip(golden["root_id"], pred_intents))
     sub_pred_intents = [root_to_pred[rid] for rid in subset["root_id"]]
 
     reference_map = build_reference_map(subset, eval_df)
     t1 = time.monotonic()
-    # A2: pre-embed the whole reply-subset in ONE batched call. Each query
+    # pre-embed the whole reply-subset in ONE batched call. Each query
     # would otherwise be embedded one-at-a-time inside nearest_reply's and
     # grounded_reply's own retrieve() call, each paced a full
     # EMBED_BATCH_INTERVAL_S apart -- about an hour for 60 messages. Doing
@@ -565,7 +597,7 @@ def main(estimate_only: bool = False) -> dict:
 
     t2 = time.monotonic()
     reply_rows_recs = []
-    # A6: judge_reply's `parse_ok` flag marks rows whose judge response
+    # judge_reply's `parse_ok` flag marks rows whose judge response
     # failed to parse (or was missing/non-numeric on some key) -- those
     # still get clamped fallback scores (so nothing crashes downstream) but
     # must not pollute the reported means/CIs, so they're tracked alongside
@@ -628,7 +660,7 @@ def main(estimate_only: bool = False) -> dict:
         "classification_macro_f1": {
             k: bootstrap_ci(f1_stat(v), n_golden) for k, v in pred_arrs.items()},
         "reply_overall": {
-            # A6: resampled over parse_ok rows only, so a parse failure's
+            # resampled over parse_ok rows only, so a parse failure's
             # clamped fallback score can't bias the CI either.
             system: bootstrap_ci(
                 lambda idx, s=system: float(np.mean(
@@ -676,6 +708,7 @@ def main(estimate_only: bool = False) -> dict:
             "LLM's own predicted intent and confidence, which can differ "
             "from gold_intent even before the confidence rule ever fires)."
         ),
+        "fingerprint": compute_fingerprint(),
     }
 
     results = {
@@ -686,7 +719,7 @@ def main(estimate_only: bool = False) -> dict:
         "metadata": metadata,
     }
 
-    # --- per-row output tables (ruling 7) ----------------------------------
+    # --- per-row output tables (decision 7) --------------------------------
     classification_rows = pd.DataFrame({
         "root_id": golden["root_id"],
         "message": golden["message"],
@@ -710,7 +743,7 @@ def main(estimate_only: bool = False) -> dict:
 
 
 def _apply_cli_offline_default(argv: list[str]) -> None:
-    """A8: `python -m eval.run_eval` must not spend quota unless --live is
+    """`python -m eval.run_eval` must not spend quota unless --live is
     passed -- without it, force SUPPORT_AGENT_OFFLINE=1 before main() runs.
     --estimate is always offline (it never calls the network either way,
     but this keeps that invariant true even if --live is also passed)."""

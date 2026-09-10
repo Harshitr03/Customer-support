@@ -111,7 +111,7 @@ def test_bootstrap_kappa_ci_reports_skipped_degenerate_resamples():
 
 
 # ---------------------------------------------------------------------------
-# B1: join_human_scores() -- re-attach system + judge score to the blind
+# join_human_scores() -- re-attach system + judge score to the blind
 # sheet, with exactly-once join validation
 # ---------------------------------------------------------------------------
 

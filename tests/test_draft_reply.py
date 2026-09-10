@@ -27,7 +27,7 @@ def test_grounded_uses_examples(monkeypatch):
     assert out.strip()
 
 
-# --- controller ruling 2: clean_reply -------------------------------------
+# --- clean_reply -----------------------------------------------------------
 
 def test_clean_reply_strips_leading_handle():
     text = "@115887 Hmm. Can you try restarting your device? Keep us posted /LS"
@@ -99,7 +99,7 @@ def test_grounded_prompt_instructs_no_urls_or_handles(monkeypatch):
     assert "URLs" in captured["prompt"] and "@handles" in captured["prompt"]
 
 
-# --- A1: no synthetic "^S" signature; strip real agent-initials sign-offs --
+# --- no synthetic "^S" signature; strip real agent-initials sign-offs --
 
 def test_canned_replies_have_no_synthetic_signature():
     for intent, text in dr.CANNED.items():

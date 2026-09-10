@@ -1,4 +1,4 @@
-"""Tests for scripts/run_demo.py (Task 13). Every stage is mocked -- this
+"""Tests for scripts/run_demo.py. Every stage is mocked -- this
 never touches the network, the real data/ directories, or results/."""
 import os
 import sys
@@ -73,7 +73,7 @@ def test_live_flag_disables_offline(tmp_path, monkeypatch):
     golden_dir.mkdir()
     (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
     _mock_all_stages(monkeypatch, calls, golden_dir)
-    # A7: give an explicit fake key rather than relying on a real
+    # give an explicit fake key rather than relying on a real
     # GEMINI_API_KEY loaded from the parent checkout's .env in this
     # worktree -- this test must pass in a fresh clone with no .env too.
     monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key-not-real")
@@ -122,7 +122,7 @@ def test_offline_missing_replay_entry_stops_cleanly_with_helpful_message(tmp_pat
 
 
 def test_quota_exhausted_stops_cleanly_with_helpful_message(tmp_path, monkeypatch, capsys):
-    """A3: a per-day quota 429 (raised as QuotaExhaustedError deep inside
+    """A per-day quota 429 (raised as QuotaExhaustedError deep inside
     llm_client's retry helper) must be caught exactly like OfflineModeError
     -- a clean stop naming the stage, no traceback, non-zero exit -- not
     bubble up as an unhandled exception."""
@@ -151,7 +151,7 @@ def test_quota_exhausted_stops_cleanly_with_helpful_message(tmp_path, monkeypatc
 
 
 def test_no_replay_without_live_is_rejected(tmp_path, monkeypatch, capsys):
-    """A5: --no-replay only makes sense alongside --live (offline mode
+    """--no-replay only makes sense alongside --live (offline mode
     never consults the replay cache's fallback logic in the way --live
     does -- there's no cache/ vs replay/ distinction to disable)."""
     calls = []
@@ -203,7 +203,7 @@ def test_export_cache_flag_calls_export_after_live_run(tmp_path, monkeypatch):
     (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
     _mock_all_stages(monkeypatch, calls, golden_dir)
     monkeypatch.setattr(run_demo, "export_touched_cache", lambda: (3, 12345))
-    # A7: explicit fake key -- see test_live_flag_disables_offline above.
+    # explicit fake key -- see test_live_flag_disables_offline above.
     monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key-not-real")
 
     code = run_demo.main(["--live", "--export-cache"])
@@ -228,7 +228,7 @@ def test_export_cache_without_live_is_a_noop(tmp_path, monkeypatch, capsys):
 
 
 def test_live_without_key_exits_before_any_stage_with_helpful_message(tmp_path, monkeypatch, capsys):
-    """Fix round 1: --live with no GEMINI_API_KEY must fail fast, before stage
+    """--live with no GEMINI_API_KEY must fail fast, before stage
     1 (the ~1 minute CSV parse), instead of crashing deep inside run_eval with
     a raw traceback."""
     calls = []

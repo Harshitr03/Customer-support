@@ -1,6 +1,6 @@
 """Gemini LLM-as-judge: score a drafted reply 1-5 on a fixed rubric.
 
-Controller ruling 2: the reference reply passed in is the REAL historical
+The reference reply passed in is the REAL historical
 Spotify reply sent to this exact customer thread (joined by root_id in
 eval/run_eval.py), never the output of any system under evaluation -- so no
 baseline is ever judged against its own output. The prompt below shows the

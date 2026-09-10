@@ -7,11 +7,11 @@ Pass --live to make real Gemini API calls instead (needs GEMINI_API_KEY in
 .env); pass --export-cache alongside --live to copy whatever that run
 touched into data/llm_cache/ for the next offline run.
 
-Controller ruling (task-13-addendum.md ruling 1): both src/ and the repo
-root must be on sys.path BEFORE importing support_agent/eval, so `from eval
-import ...` resolves when this file is run directly (`python
-scripts/run_demo.py`), not just via `pytest` (whose `pythonpath` ini option
-already covers both directories for the test suite).
+Both src/ and the repo root must be on sys.path BEFORE importing
+support_agent/eval, so `from eval import ...` resolves when this file is
+run directly (`python scripts/run_demo.py`), not just via `pytest` (whose
+`pythonpath` ini option already covers both directories for the test
+suite).
 """
 import argparse
 import os
@@ -166,10 +166,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.live:
         os.environ.pop("SUPPORT_AGENT_OFFLINE", None)
-        # Fix round 1: pre-flight check. config (imported at module load, above)
-        # already called load_dotenv() by this point, so os.environ reflects
-        # .env. Without this check, --live with no key ran stage 1 (up to ~1
-        # min CSV parse) and then crashed with a raw traceback deep inside
+        # Pre-flight check. config (imported at module load, above) already
+        # called load_dotenv() by this point, so os.environ reflects .env.
+        # Without this check, --live with no key ran stage 1 (up to ~1 min
+        # CSV parse) and then crashed with a raw traceback deep inside
         # run_eval.main() the first time it needed a client -- never print the
         # key's value, just whether it's present.
         if not os.environ.get("GEMINI_API_KEY"):

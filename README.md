@@ -18,6 +18,12 @@ pip install -e ".[dev]"
 cp .env.example .env           # only needed for --live (see below)
 ```
 
+`pyproject.toml`'s dependency bounds are the versions actually tested.
+`requirements.lock` (`pip freeze --exclude-editable`) pins every transitive
+dependency exactly, for a fully reproducible environment:
+`pip install -r requirements.lock` instead of the `pip install -e ".[dev]"`
+line above if you want that.
+
 ### Dataset
 
 Download the Kaggle dataset

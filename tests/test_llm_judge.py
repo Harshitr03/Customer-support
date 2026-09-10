@@ -44,7 +44,7 @@ def test_judge_handles_non_numeric_value(monkeypatch):
     assert s["grounded"] == 3   # non-numeric falls back to default
 
 
-# --- A6: parse_ok flag -----------------------------------------------------
+# --- parse_ok flag -----------------------------------------------------
 
 def test_judge_reports_parse_ok_true_on_valid_json(monkeypatch):
     monkeypatch.setattr(llm_judge.llm_client, "generate",
@@ -84,9 +84,9 @@ def test_judge_reports_parse_ok_false_on_non_numeric_value(monkeypatch):
 
 
 def test_judge_prompt_describes_reference_as_guide_not_answer_key():
-    """Controller ruling 2: the judge prompt must frame the reference as a
-    real historical reply used as a guide, not an answer key to copy, and
-    must never reveal which system produced the drafted reply."""
+    """The judge prompt must frame the reference as a real historical
+    reply used as a guide, not an answer key to copy, and must never
+    reveal which system produced the drafted reply."""
     prompt = llm_judge._RUBRIC.format(reference="REF", message="MSG", reply="REPLY")
     assert "REF" in prompt and "MSG" in prompt and "REPLY" in prompt
     assert "answer key" in llm_judge._RUBRIC.lower()

@@ -13,6 +13,7 @@ venv/
 # env / secrets
 .env
 .env.*
+!.env.example
 
 # generated artifacts (reproducible via pipeline, kept out of git except curated ones under data/golden)
 data/raw

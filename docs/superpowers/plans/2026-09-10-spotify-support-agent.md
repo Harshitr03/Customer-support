@@ -1,5 +1,7 @@
 # SpotifyCares AI Support Agent — Implementation Plan
 
+> Superseded where it conflicts with `report/DECISION_LOG.md` (e.g. the retrieval index now lives in `data/kb/`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a runnable, evaluated AI support agent for `@SpotifyCares` that classifies a customer tweet's intent, drafts a reply grounded in historical resolutions, and decides auto-handle vs. escalate with a stated reason — plus the golden set, eval harness, and report that prove it works.

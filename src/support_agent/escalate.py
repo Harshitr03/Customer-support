@@ -9,7 +9,7 @@ import re
 logger = logging.getLogger(__name__)
 
 # Renamed from the original taxonomy names (playback_bug -> technical_bug,
-# account_login -> account_access) after Task 3 reviewed real data.
+# account_login -> account_access) after reviewing real data.
 ESCALATE_INTENTS = {"account_access", "billing_subscription", "cancellation_refund"}
 CONF_THRESHOLD = 0.55
 MAX_UNRESOLVED_TURNS = 6  # 3+ back-and-forth rounds

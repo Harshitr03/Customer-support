@@ -3,18 +3,17 @@ name = "support-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "google-genai>=0.3.0",
-    "pandas>=2.0",
-    "numpy>=1.26",
-    "scikit-learn>=1.4",
-    "scipy>=1.11",
-    "pyarrow>=15.0",
-    "python-dotenv>=1.0",
-    "tqdm>=4.66",
+    "google-genai>=2.22.0",
+    "pandas>=3.0.5",
+    "numpy>=2.5.3",
+    "scikit-learn>=1.9.0",
+    "scipy>=1.18.1",
+    "pyarrow>=25.0.1",
+    "python-dotenv>=1.2.3",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=9.1.1"]
 
 [build-system]
 requires = ["setuptools>=68"]

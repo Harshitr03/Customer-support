@@ -37,7 +37,7 @@ def test_stratified_raises_when_min_exceeds_size(monkeypatch):
 
 
 def test_in_spotcheck_is_a_simple_random_sample_not_stratified():
-    """B3: eval/golden_labeling_notes.md documents in_spotcheck as a seeded
+    """eval/golden_labeling_notes.md documents in_spotcheck as a seeded
     simple random sample of 40, not stratified by intent. Guard that claim
     directly against build()'s actual sampling call -- pandas' plain
     DataFrame.sample() (no `weights`/grouping) is simple random sampling."""
@@ -47,7 +47,7 @@ def test_in_spotcheck_is_a_simple_random_sample_not_stratified():
 
 
 # ---------------------------------------------------------------------------
-# B3: eval/golden_labeling_notes.md's "Labeling results" numbers must match
+# eval/golden_labeling_notes.md's "Labeling results" numbers must match
 # the actual (frozen, committed) golden set -- a regression guard against
 # the doc silently drifting from the data.
 # ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ def test_golden_labeling_notes_has_author_review_placeholder():
 
 
 # ---------------------------------------------------------------------------
-# B4: README.md, eval/golden_labeling_notes.md, and report/DECISION_LOG.md
+# README.md, eval/golden_labeling_notes.md, and report/DECISION_LOG.md
 # item 4 must describe the SAME labeling process, truthfully -- Claude
 # drafts against the rubric, the author reviews before the eval runs, and
 # the review has not (yet) happened.

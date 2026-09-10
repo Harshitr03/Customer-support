@@ -219,7 +219,7 @@ def test_human_scoring_template_raises_on_missing_reply_row():
 
 
 # ---------------------------------------------------------------------------
-# B1: build_blind_human_scoring -- blind sheet + separate key, seeded shuffle
+# build_blind_human_scoring -- blind sheet + separate key, seeded shuffle
 # ---------------------------------------------------------------------------
 
 def _make_spotcheck_and_reply_rows(n=40):
@@ -380,7 +380,7 @@ def test_estimate_calls_subtracts_provably_cached(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# A8: --estimate must count a REPLAY_CACHE_DIR hit as cached too (unless
+# --estimate must count a REPLAY_CACHE_DIR hit as cached too (unless
 # SUPPORT_AGENT_NO_REPLAY is set), not just a local CACHE_DIR hit
 # ---------------------------------------------------------------------------
 
@@ -430,7 +430,7 @@ def test_is_embed_cached_counts_replay_cache_hit(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# A8: `python -m eval.run_eval` defaults to offline unless --live is passed;
+# `python -m eval.run_eval` defaults to offline unless --live is passed;
 # --estimate is always offline regardless of --live
 # ---------------------------------------------------------------------------
 
@@ -566,7 +566,7 @@ def test_main_full_run_writes_ruling7_outputs(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# B2: escalation baselines (always/never/simple_tfidf) alongside end-to-end
+# escalation baselines (always/never/simple_tfidf) alongside end-to-end
 # and policy-only
 # ---------------------------------------------------------------------------
 
@@ -654,7 +654,7 @@ def test_main_reports_escalation_baselines(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# A2: batch the reply-subset query embeddings into one embed() call
+# batch the reply-subset query embeddings into one embed() call
 # ---------------------------------------------------------------------------
 
 def test_main_batches_subset_embeddings_in_one_call_before_drafting(tmp_path, monkeypatch):
@@ -722,7 +722,7 @@ def test_main_batches_subset_embeddings_in_one_call_before_drafting(tmp_path, mo
 
 
 # ---------------------------------------------------------------------------
-# A6: judge parse-failure tracking (judge_parse_ok column, metadata counts,
+# judge parse-failure tracking (judge_parse_ok column, metadata counts,
 # means/CIs computed over parse_ok rows only)
 # ---------------------------------------------------------------------------
 
@@ -782,3 +782,76 @@ def test_main_reports_judge_parse_failures_and_excludes_from_stats(tmp_path, mon
     rrows = pd.read_csv(tmp_path / "reply_rows.csv")
     assert "judge_parse_ok" in rrows.columns
     assert int((~rrows["judge_parse_ok"]).sum()) == 3  # one failure per system, 3 systems
+
+
+# ---------------------------------------------------------------------------
+# B5: eval_results.json metadata fingerprint -- sha256 of everything that
+# determines a real run's output, so drift between the replay cache and the
+# current code/data is visible
+# ---------------------------------------------------------------------------
+
+def test_compute_fingerprint_returns_expected_keys_with_stable_hex_hashes():
+    fp1 = run_eval.compute_fingerprint()
+    fp2 = run_eval.compute_fingerprint()
+    assert fp1 == fp2  # deterministic for unchanged inputs
+
+    expected_keys = {
+        "classify_prompt_sha256", "grounded_prompt_sha256", "judge_prompt_sha256",
+        "canned_replies_sha256", "kb_meta_sha256", "golden_eval_sha256",
+    }
+    assert set(fp1.keys()) == expected_keys
+    for key, value in fp1.items():
+        assert isinstance(value, str) and len(value) == 64, f"{key} is not a sha256 hexdigest"
+        int(value, 16)  # valid hex
+
+
+def test_compute_fingerprint_canned_hash_changes_when_canned_dict_changes(monkeypatch):
+    baseline = run_eval.compute_fingerprint()["canned_replies_sha256"]
+    monkeypatch.setattr(run_eval.draft_reply, "CANNED",
+                        {**run_eval.draft_reply.CANNED, "other": "a different reply"})
+    changed = run_eval.compute_fingerprint()["canned_replies_sha256"]
+    assert changed != baseline
+
+
+def test_compute_fingerprint_prompt_hash_changes_when_prompt_template_changes(monkeypatch):
+    baseline = run_eval.compute_fingerprint()["grounded_prompt_sha256"]
+    monkeypatch.setattr(run_eval.draft_reply, "_GEN_PROMPT", "a completely different template")
+    changed = run_eval.compute_fingerprint()["grounded_prompt_sha256"]
+    assert changed != baseline
+
+
+def test_main_metadata_includes_fingerprint(tmp_path, monkeypatch):
+    n, n_spotcheck, n_extra = 4, 2, 1
+    golden = _fake_golden(n=n, n_spotcheck=n_spotcheck)
+    eval_df = pd.DataFrame({
+        "root_id": golden["root_id"],
+        "spotify_reply": [f"real reply {i}" for i in range(n)],
+    })
+    corpus = pd.DataFrame({"customer_open": ["a", "b", "c"]})
+
+    monkeypatch.setattr(run_eval, "load_golden", lambda: golden)
+    monkeypatch.setattr(run_eval.data_prep, "load_pools", lambda: (corpus, eval_df))
+    monkeypatch.setattr(run_eval, "N_EXTRA_NONSPOTCHECK", n_extra)
+    monkeypatch.setattr(run_eval.weak_labels, "weak_label", lambda t: "other")
+    monkeypatch.setattr(run_eval.classify, "llm_classify", _stub_llm_classify)
+    monkeypatch.setattr(run_eval.classify.SimpleClassifier, "from_weak_corpus",
+                        classmethod(lambda cls: _StubSimple()))
+    monkeypatch.setattr(run_eval.draft_reply, "trivial_reply", lambda intent: f"trivial:{intent}")
+    monkeypatch.setattr(run_eval.draft_reply, "nearest_reply", lambda msg: f"nearest:{msg}")
+    monkeypatch.setattr(run_eval.draft_reply, "grounded_reply", lambda msg, intent: f"grounded:{intent}:{msg}")
+    monkeypatch.setattr(run_eval.llm_client, "embed",
+                        lambda texts: np.zeros((len(texts), 8), dtype=np.float32))
+    monkeypatch.setattr(run_eval, "judge_reply",
+                        lambda message, reply, reference: {"grounded": 4, "factual": 4, "tone": 4,
+                                                            "actionable": 4, "overall": 4,
+                                                            "parse_ok": True})
+    monkeypatch.setattr(run_eval.config, "RESULTS_DIR", tmp_path)
+    monkeypatch.setattr(run_eval, "N_BOOTSTRAP", 5)
+
+    result = run_eval.main(estimate_only=False)
+
+    fp = result["metadata"]["fingerprint"]
+    assert fp == run_eval.compute_fingerprint()
+
+    saved = json.loads((tmp_path / "eval_results.json").read_text())
+    assert saved["metadata"]["fingerprint"] == fp

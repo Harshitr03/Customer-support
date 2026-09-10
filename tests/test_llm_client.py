@@ -8,7 +8,7 @@ from support_agent import llm_client as lc
 
 @pytest.fixture(autouse=True)
 def _no_embed_pacing(monkeypatch):
-    """Controller ruling F2 paces real embed batches to config.EMBED_BATCH_
+    """Real embed batches are paced to config.EMBED_BATCH_
     INTERVAL_S (61s by default), tracked via a process-wide timestamp. Tests
     that don't specifically exercise pacing shouldn't sleep for real or be
     affected by state another test left behind."""
@@ -18,14 +18,14 @@ def _no_embed_pacing(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _reset_touched_files(monkeypatch):
-    """Task 13: touched_cache_files() is a module-level set; don't let one
+    """touched_cache_files() is a module-level set; don't let one
     test's reads/writes bleed into the next."""
     monkeypatch.setattr(lc, "_touched_files", set())
 
 
 @pytest.fixture(autouse=True)
 def _offline_env_isolated(monkeypatch):
-    """Task 13: SUPPORT_AGENT_OFFLINE must never leak between tests. Start
+    """SUPPORT_AGENT_OFFLINE must never leak between tests. Start
     every test with it unset; monkeypatch restores whatever it was
     (including unset) after the test regardless of what ran in between."""
     monkeypatch.delenv("SUPPORT_AGENT_OFFLINE", raising=False)
@@ -59,7 +59,7 @@ def test_embed_caches_per_text(tmp_path, monkeypatch):
 
 
 def test_embed_chunks_by_embed_batch(tmp_path, monkeypatch):
-    """Controller ruling: embed() must send missing texts to _raw_embed in
+    """embed() must send missing texts to _raw_embed in
     chunks of at most config.EMBED_BATCH, caching each chunk as it arrives,
     while keeping output rows aligned with input order."""
     monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path)
@@ -146,7 +146,7 @@ def test_retry_with_backoff_raises_non_retryable_immediately(monkeypatch):
 
 
 def test_retry_with_backoff_honors_server_retry_delay(monkeypatch):
-    """Controller ruling F3: a 429 whose details carry a RetryInfo
+    """A 429 whose details carry a RetryInfo
     retryDelay must be honored (plus ~1s slack) instead of the exponential
     schedule, so we don't exhaust retries while the quota window is still
     open."""
@@ -207,7 +207,7 @@ def test_retry_with_backoff_falls_back_to_exponential_without_retry_delay(monkey
 
 
 def test_retry_with_backoff_raises_quota_exhausted_immediately_on_perday_429(monkeypatch):
-    """A1: a 429 whose QuotaFailure details carry a quotaId containing
+    """A 429 whose QuotaFailure details carry a quotaId containing
     "PerDay" must raise QuotaExhaustedError at once -- no sleep, no further
     attempts -- because retrying within the same day can't help."""
     from google.genai import errors as genai_errors
@@ -247,7 +247,7 @@ def test_retry_with_backoff_raises_quota_exhausted_immediately_on_perday_429(mon
 
 
 def test_retry_with_backoff_still_retries_on_perminute_429(monkeypatch):
-    """A1: a 429 for a PER-MINUTE quota (no "PerDay" in the quotaId) must
+    """A 429 for a PER-MINUTE quota (no "PerDay" in the quotaId) must
     keep using the normal retry path, not QuotaExhaustedError."""
     from google.genai import errors as genai_errors
 
@@ -281,7 +281,7 @@ def test_retry_with_backoff_still_retries_on_perminute_429(monkeypatch):
 
 
 def test_embed_paces_real_batches_for_free_tier_quota(tmp_path, monkeypatch):
-    """Controller ruling F2: separate real embed batches must be spaced at
+    """Separate real embed batches must be spaced at
     least config.EMBED_BATCH_INTERVAL_S apart, tracked process-wide, so a
     100-per-minute free-tier quota isn't exceeded across embed() calls."""
     monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path)
@@ -333,7 +333,7 @@ def test_embed_fully_cached_call_never_paces(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Task 13: replay cache, offline guard, touched-files tracking, export
+# Replay cache, offline guard, touched-files tracking, export
 # ---------------------------------------------------------------------------
 
 def test_generate_replay_fallback_no_network_and_replay_readonly(tmp_path, monkeypatch):
@@ -428,7 +428,7 @@ def test_touched_cache_files_records_writes_and_hits(tmp_path, monkeypatch):
 
 
 def test_generate_does_not_cache_empty_response(tmp_path, monkeypatch, caplog):
-    """A6: an empty or whitespace-only generate() response must never be
+    """An empty or whitespace-only generate() response must never be
     written to disk -- caching it would make every future call for that
     same prompt replay the empty string forever instead of retrying."""
     monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path)
@@ -457,7 +457,7 @@ def test_generate_empty_response_is_retried_on_next_call(tmp_path, monkeypatch):
 
 
 def test_generate_ignores_replay_cache_when_no_replay_env_set(tmp_path, monkeypatch):
-    """A5: SUPPORT_AGENT_NO_REPLAY=1 must disable the replay-cache lookup so
+    """SUPPORT_AGENT_NO_REPLAY=1 must disable the replay-cache lookup so
     --live --no-replay genuinely calls the network for anything not in the
     local disk cache, even if a replay entry exists."""
     cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
@@ -512,7 +512,7 @@ def test_export_touched_cache_writes_new_files(tmp_path, monkeypatch):
 
 
 def test_export_touched_cache_overwrites_stale_files_and_skips_identical(tmp_path, monkeypatch, caplog):
-    """A4: a replay file must be refreshed when the local cache's bytes for
+    """A replay file must be refreshed when the local cache's bytes for
     that same filename have changed (e.g. the prompt template or model
     changed since the replay cache was committed) -- silently keeping the
     stale replay file forever would make offline runs replay outdated

@@ -1,9 +1,8 @@
 """Agreement between the LLM judge and a human rater on reply overall scores.
 
-Task 12: the assignment asks for "evidence of how well your LLM judge agrees
-with a human". This module computes that evidence from
-`data/golden/human_scores.csv`, the filled-in blind scoring sheet (B1):
-a human rater filled in `human_overall` for
+This module computes evidence of how well the LLM judge agrees with a
+human, from `data/golden/human_scores.csv`, the filled-in blind scoring
+sheet: a human rater filled in `human_overall` for
 `results/human_scoring_blind.csv`'s 40 (message, reply) pairs, which
 carries neither the drafting system's name nor the judge's own score for
 that pair -- see `results/human_scoring_rubric.md` for the rubric they
@@ -12,9 +11,7 @@ scored against. This module re-attaches that identity from
 actually was) and the judge's own score from `results/reply_rows.csv`,
 purely for analysis; the human never saw either.
 
-Controller rulings applied here (see task-12-brief.md for the base spec,
-and the ruling list in the task prompt for what overrides it), as amended
-by the B1 blind-scoring fix:
+Design decisions worth calling out:
 
   1. Input shape: main() reads the filled blind sheet (item_id, message,
      reply, reference, human_overall), joins it against
@@ -211,7 +208,7 @@ def _validate_scores(df: pd.DataFrame) -> pd.DataFrame:
 
 def join_human_scores(human_df: pd.DataFrame, key_df: pd.DataFrame,
                        reply_rows: pd.DataFrame) -> pd.DataFrame:
-    """B1: re-attach the drafting system and the judge's own score to the
+    """Re-attach the drafting system and the judge's own score to the
     filled-in blind sheet, purely for analysis -- the human rater saw
     neither. `human_df` is the filled results/human_scoring_blind.csv
     (item_id, message, reply, reference, human_overall); `key_df` is

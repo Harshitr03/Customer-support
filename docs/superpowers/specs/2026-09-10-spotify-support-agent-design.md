@@ -1,5 +1,7 @@
 # Design: AI Support Agent for @SpotifyCares (Hiver take-home)
 
+> Superseded where it conflicts with `report/DECISION_LOG.md` (e.g. the retrieval index now lives in `data/kb/`).
+
 ## Overview
 
 Build an AI support agent for the `SpotifyCares` brand from the Kaggle

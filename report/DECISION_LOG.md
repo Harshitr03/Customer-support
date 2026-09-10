@@ -42,7 +42,13 @@ The non-obvious decisions behind this agent, and why. Each one names what it cos
     - Retries wait as long as the server's `retryDelay` asks.
     - `python -m eval.run_eval --estimate` prints the exact number of API calls before anything is spent.
 
-    The whole evaluation is at most 440 text calls and 60 embeddings.
+    The real run makes at most 442 text calls and 61 embeddings, counting
+    `scripts/run_demo.py`'s stage-6 live example on top of the eval harness
+    itself (200 classify + 60 grounded-reply + 180 judge = 440 text calls,
+    plus 1 classify and 1 grounded-reply call for the demo message; 60
+    query embeddings for the reply-quality subset, plus 1 for the demo
+    message). The reply-subset's 60 query embeddings go out in a single
+    batched `embed()` call, not one network round-trip per message.
 
 ---
 
