@@ -427,7 +427,7 @@ def test_touched_cache_files_records_writes_and_hits(tmp_path, monkeypatch):
     assert set(lc.touched_cache_files()) == touched_after_write
 
 
-def test_export_touched_cache_copies_and_skips_existing(tmp_path, monkeypatch):
+def test_export_touched_cache_writes_new_files(tmp_path, monkeypatch):
     cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
     cache_dir.mkdir()
     replay_dir.mkdir()
@@ -435,14 +435,46 @@ def test_export_touched_cache_copies_and_skips_existing(tmp_path, monkeypatch):
     monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
 
     (cache_dir / "gen_aaa.json").write_text('{"text": "a"}')
-    (cache_dir / "gen_bbb.json").write_text('{"text": "b"}')
-    (replay_dir / "gen_bbb.json").write_text('{"text": "already present, must not be overwritten"}')
-
-    monkeypatch.setattr(lc, "_touched_files", {"gen_aaa.json", "gen_bbb.json"})
+    monkeypatch.setattr(lc, "_touched_files", {"gen_aaa.json"})
 
     n_copied, n_bytes = lc.export_touched_cache()
 
     assert n_copied == 1
     assert (replay_dir / "gen_aaa.json").read_text() == '{"text": "a"}'
-    assert (replay_dir / "gen_bbb.json").read_text() == '{"text": "already present, must not be overwritten"}'
     assert n_bytes == len((cache_dir / "gen_aaa.json").read_bytes())
+
+
+def test_export_touched_cache_overwrites_stale_files_and_skips_identical(tmp_path, monkeypatch, caplog):
+    """A4: a replay file must be refreshed when the local cache's bytes for
+    that same filename have changed (e.g. the prompt template or model
+    changed since the replay cache was committed) -- silently keeping the
+    stale replay file forever would make offline runs replay outdated
+    responses. An identical replay file is left untouched (skip, don't
+    rewrite for no reason)."""
+    cache_dir, replay_dir = tmp_path / "cache", tmp_path / "replay"
+    cache_dir.mkdir()
+    replay_dir.mkdir()
+    monkeypatch.setattr(lc.config, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
+
+    (cache_dir / "gen_stale.json").write_text('{"text": "new value"}')
+    (replay_dir / "gen_stale.json").write_text('{"text": "old stale value"}')
+    (cache_dir / "gen_same.json").write_text('{"text": "unchanged"}')
+    (replay_dir / "gen_same.json").write_text('{"text": "unchanged"}')
+
+    monkeypatch.setattr(lc, "_touched_files", {"gen_stale.json", "gen_same.json"})
+
+    with caplog.at_level("INFO", logger=lc.logger.name):
+        n_copied, n_bytes = lc.export_touched_cache()
+
+    # only the stale (differing) file was actually written
+    assert n_copied == 1
+    assert (replay_dir / "gen_stale.json").read_text() == '{"text": "new value"}'
+    assert (replay_dir / "gen_same.json").read_text() == '{"text": "unchanged"}'
+    assert n_bytes == len((cache_dir / "gen_stale.json").read_bytes())
+
+    # counts of new/updated/unchanged are logged
+    messages = " ".join(r.message for r in caplog.records)
+    assert "1 updated" in messages or "updated=1" in messages
+    assert "1 unchanged" in messages or "unchanged=1" in messages
+    assert "0 new" in messages or "new=0" in messages

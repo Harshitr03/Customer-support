@@ -61,22 +61,39 @@ def touched_cache_files() -> list[str]:
 
 def export_touched_cache() -> tuple[int, int]:
     """Copy every file in touched_cache_files() from config.CACHE_DIR into
-    config.REPLAY_CACHE_DIR, skipping files already present there. The only
-    place that writes into REPLAY_CACHE_DIR -- generate()/embed() never do.
-    Returns (n_files_copied, n_bytes_copied)."""
+    config.REPLAY_CACHE_DIR. A replay file that doesn't exist yet is written
+    (new); one that exists but whose bytes differ from the local cache is
+    overwritten (updated) -- otherwise a stale replay file would silently
+    keep serving an outdated response forever; one whose bytes already
+    match is left alone (unchanged). The only place that writes into
+    REPLAY_CACHE_DIR -- generate()/embed() never do.
+    Returns (n_files_written, n_bytes_written) where n_files_written counts
+    new + updated (not unchanged)."""
     config.REPLAY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    n_copied = 0
+    n_new = n_updated = n_unchanged = 0
     n_bytes = 0
     for name in touched_cache_files():
         src = config.CACHE_DIR / name
-        dst = config.REPLAY_CACHE_DIR / name
-        if dst.exists() or not src.exists():
+        if not src.exists():
             continue
+        dst = config.REPLAY_CACHE_DIR / name
         data = src.read_bytes()
-        dst.write_bytes(data)
-        n_copied += 1
-        n_bytes += len(data)
-    return n_copied, n_bytes
+        if dst.exists():
+            if dst.read_bytes() == data:
+                n_unchanged += 1
+                continue
+            dst.write_bytes(data)
+            n_updated += 1
+            n_bytes += len(data)
+        else:
+            dst.write_bytes(data)
+            n_new += 1
+            n_bytes += len(data)
+    logger.info(
+        "export_touched_cache: %d new, %d updated, %d unchanged (%d bytes written)",
+        n_new, n_updated, n_unchanged, n_bytes,
+    )
+    return n_new + n_updated, n_bytes
 
 
 def _get_client():
