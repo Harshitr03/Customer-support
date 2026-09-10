@@ -111,6 +111,35 @@ def test_offline_missing_replay_entry_stops_cleanly_with_helpful_message(tmp_pat
     assert "eval harness" in out.lower() or "4/6" in out  # names the stage that needed it
 
 
+def test_quota_exhausted_stops_cleanly_with_helpful_message(tmp_path, monkeypatch, capsys):
+    """A3: a per-day quota 429 (raised as QuotaExhaustedError deep inside
+    llm_client's retry helper) must be caught exactly like OfflineModeError
+    -- a clean stop naming the stage, no traceback, non-zero exit -- not
+    bubble up as an unhandled exception."""
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+
+    def raise_quota_exhausted():
+        calls.append("run_eval")
+        raise run_demo.QuotaExhaustedError(
+            "daily quota exhausted (GenerateRequestsPerDayPerProjectPerModel-FreeTier). "
+            "It resets at midnight Pacific time (12:30 PM IST during daylight saving). "
+            "Rerunning later resumes from the local cache -- nothing already fetched is lost."
+        )
+
+    monkeypatch.setattr(run_demo.run_eval, "main", raise_quota_exhausted)
+
+    code = run_demo.main([])
+
+    assert code == 1
+    assert calls == ["build_pool", "build_index", "build_golden_set", "run_eval"]
+    out = capsys.readouterr().out
+    assert "eval harness" in out.lower() or "4/6" in out  # names the stage that needed it
+    assert "midnight" in out.lower() and "pacific" in out.lower()
+
+
 def test_export_cache_flag_calls_export_after_live_run(tmp_path, monkeypatch):
     calls = []
     golden_dir = tmp_path / "golden"

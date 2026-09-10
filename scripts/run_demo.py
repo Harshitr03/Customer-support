@@ -30,7 +30,9 @@ sys.path.insert(0, str(_ROOT))
 os.environ.setdefault("SUPPORT_AGENT_OFFLINE", "1")
 
 from support_agent import config, data_prep, pipeline, retrieve  # noqa: E402
-from support_agent.llm_client import OfflineModeError, export_touched_cache  # noqa: E402
+from support_agent.llm_client import (  # noqa: E402
+    OfflineModeError, QuotaExhaustedError, export_touched_cache,
+)
 from eval import build_golden_set, human_agreement, run_eval  # noqa: E402
 
 FIXED_MESSAGE = "@SpotifyCares the app keeps crashing every time I press play on my iPhone"
@@ -128,6 +130,9 @@ def run_stages() -> int:
             "  - if you're the maintainer, run with --live --export-cache to refresh the\n"
             "    committed replay cache so graders can reproduce this offline."
         )
+        return 1
+    except QuotaExhaustedError as exc:
+        print(f"\nStopped at stage {stage}/{N_STAGES} ({STAGE_LABELS[stage]}): {exc}")
         return 1
     return 0
 

@@ -206,6 +206,80 @@ def test_retry_with_backoff_falls_back_to_exponential_without_retry_delay(monkey
     assert sleeps == [2.0, 4.0]  # unchanged exponential schedule (base=2, x2)
 
 
+def test_retry_with_backoff_raises_quota_exhausted_immediately_on_perday_429(monkeypatch):
+    """A1: a 429 whose QuotaFailure details carry a quotaId containing
+    "PerDay" must raise QuotaExhaustedError at once -- no sleep, no further
+    attempts -- because retrying within the same day can't help."""
+    from google.genai import errors as genai_errors
+
+    sleeps = []
+    monkeypatch.setattr(lc.time, "sleep", lambda s: sleeps.append(s))
+
+    resp_json = {
+        "error": {
+            "code": 429,
+            "message": "You exceeded your current quota...",
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}],
+                },
+            ],
+        }
+    }
+
+    attempts = {"n": 0}
+
+    def always_daily_quota():
+        attempts["n"] += 1
+        raise genai_errors.ClientError(429, resp_json, None)
+
+    with pytest.raises(lc.QuotaExhaustedError) as exc_info:
+        lc._retry_with_backoff(always_daily_quota)
+
+    assert attempts["n"] == 1
+    assert sleeps == []
+    msg = str(exc_info.value)
+    assert "GenerateRequestsPerDayPerProjectPerModel-FreeTier" in msg
+    assert "midnight" in msg.lower() and "pacific" in msg.lower()
+    assert "cache" in msg.lower()
+
+
+def test_retry_with_backoff_still_retries_on_perminute_429(monkeypatch):
+    """A1: a 429 for a PER-MINUTE quota (no "PerDay" in the quotaId) must
+    keep using the normal retry path, not QuotaExhaustedError."""
+    from google.genai import errors as genai_errors
+
+    monkeypatch.setattr(lc.time, "sleep", lambda s: None)
+
+    resp_json = {
+        "error": {
+            "code": 429,
+            "message": "You exceeded your current quota...",
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [{"quotaId": "EmbedContentRequestsPerMinutePerUserPerProjectPerModel-FreeTier"}],
+                },
+            ],
+        }
+    }
+
+    attempts = {"n": 0}
+
+    def flaky():
+        attempts["n"] += 1
+        if attempts["n"] < 2:
+            raise genai_errors.ClientError(429, resp_json, None)
+        return "ok"
+
+    result = lc._retry_with_backoff(flaky)
+    assert result == "ok"
+    assert attempts["n"] == 2
+
+
 def test_embed_paces_real_batches_for_free_tier_quota(tmp_path, monkeypatch):
     """Controller ruling F2: separate real embed batches must be spaced at
     least config.EMBED_BATCH_INTERVAL_S apart, tracked process-wide, so a

@@ -36,6 +36,14 @@ class OfflineModeError(RuntimeError):
     touching the network."""
 
 
+class QuotaExhaustedError(RuntimeError):
+    """Raised immediately (no retries, no sleeping) when a 429's error
+    details show a per-day quota was exhausted (quotaId contains "PerDay").
+    Retrying within the retry loop can't help here -- the quota won't come
+    back until it resets -- so this is treated as non-retryable even though
+    a 429 normally is."""
+
+
 def _check_offline_guard() -> None:
     """Checked inside the raw network functions themselves (not generate()/
     embed()) so it can't be bypassed by any caching path."""
@@ -119,20 +127,59 @@ def _parse_retry_delay(exc: Exception) -> float | None:
     return None
 
 
+def _parse_quota_id(exc: Exception) -> str | None:
+    """Extract the first quotaId from a 429's QuotaFailure details, if
+    present. Same error-body shape as _parse_retry_delay's RetryInfo lookup
+    (`{'error': {..., 'details': [{'@type': '.../QuotaFailure', 'violations':
+    [{'quotaId': '...'}, ...]}, ...]}}`, sometimes without the outer
+    'error' wrapper). Returns None if absent or unparseable."""
+    details = getattr(exc, "details", None)
+    if not isinstance(details, dict):
+        return None
+    err = details.get("error", details)
+    if not isinstance(err, dict):
+        return None
+    sub_details = err.get("details")
+    if not isinstance(sub_details, list):
+        return None
+    for d in sub_details:
+        if not isinstance(d, dict):
+            continue
+        violations = d.get("violations")
+        if not isinstance(violations, list):
+            continue
+        for v in violations:
+            if isinstance(v, dict) and isinstance(v.get("quotaId"), str):
+                return v["quotaId"]
+    return None
+
+
 def _retry_with_backoff(fn, *args, **kwargs):
     """Call fn(*args, **kwargs), retrying on rate-limit/server errors.
     When the error carries a server-suggested retryDelay (RetryInfo detail),
     sleep that long (plus a small slack, capped) instead of guessing;
     otherwise fall back to exponential backoff. Anything else (e.g. auth
-    errors) is re-raised immediately."""
+    errors) is re-raised immediately. A 429 for an exhausted PER-DAY quota
+    (quotaId containing "PerDay") is raised immediately as
+    QuotaExhaustedError instead of being retried -- the free-tier daily
+    quota won't reopen before this process' retry budget runs out."""
     delay = _RETRYABLE_BASE_DELAY
     for attempt in range(1, _RETRYABLE_MAX_ATTEMPTS + 1):
         try:
             return fn(*args, **kwargs)
         except Exception as exc:
+            code = getattr(exc, "code", None)
+            if code == 429:
+                quota_id = _parse_quota_id(exc)
+                if quota_id and "PerDay" in quota_id:
+                    raise QuotaExhaustedError(
+                        f"daily quota exhausted ({quota_id}). It resets at "
+                        "midnight Pacific time (12:30 PM IST during daylight "
+                        "saving). Rerunning later resumes from the local "
+                        "cache -- nothing already fetched is lost."
+                    ) from exc
             if attempt == _RETRYABLE_MAX_ATTEMPTS or not _is_retryable(exc):
                 raise
-            code = getattr(exc, "code", None)
             retry_delay = _parse_retry_delay(exc)
             if retry_delay is not None:
                 wait = min(retry_delay + _RETRY_DELAY_SLACK_S, _RETRY_DELAY_CAP_S)
