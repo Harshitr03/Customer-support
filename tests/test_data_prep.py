@@ -26,6 +26,10 @@ def _toy_df():
 def test_reconstruct_orders_by_time():
     threads = data_prep.reconstruct_threads(_toy_df())
     t = [x for x in threads if any(tr["author_id"]=="SpotifyCares" for tr in x["turns"])][0]
+    # root_id must resolve to the actual thread-root tweet (3, the customer's
+    # opening tweet with no parent), not min(seen) over the connected
+    # component (which would incorrectly give 1, the Spotify reply).
+    assert t["root_id"] == 3
     texts = [tr["text"] for tr in t["turns"]]
     assert texts[0].startswith("@SpotifyCares app keeps")
     assert "reinstalling" in texts[1]
