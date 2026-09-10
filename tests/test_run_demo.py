@@ -73,6 +73,10 @@ def test_live_flag_disables_offline(tmp_path, monkeypatch):
     golden_dir.mkdir()
     (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
     _mock_all_stages(monkeypatch, calls, golden_dir)
+    # A7: give an explicit fake key rather than relying on a real
+    # GEMINI_API_KEY loaded from the parent checkout's .env in this
+    # worktree -- this test must pass in a fresh clone with no .env too.
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key-not-real")
 
     code = run_demo.main(["--live"])
 
@@ -199,6 +203,8 @@ def test_export_cache_flag_calls_export_after_live_run(tmp_path, monkeypatch):
     (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
     _mock_all_stages(monkeypatch, calls, golden_dir)
     monkeypatch.setattr(run_demo, "export_touched_cache", lambda: (3, 12345))
+    # A7: explicit fake key -- see test_live_flag_disables_offline above.
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key-not-real")
 
     code = run_demo.main(["--live", "--export-cache"])
 

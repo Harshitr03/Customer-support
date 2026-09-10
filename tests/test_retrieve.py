@@ -5,13 +5,27 @@ import pytest
 from support_agent import retrieve
 
 
+def _clear_load_index_cache():
+    """cache_clear() only exists on the real lru_cache-wrapped
+    _load_index -- a test that monkeypatches _load_index to a plain
+    lambda (test_cosine_topk) has swapped it out for the duration of the
+    test, and monkeypatch's own teardown (which restores the real
+    function) doesn't necessarily run before this fixture's teardown (A7's
+    tests/conftest.py autouse fixture requests `monkeypatch` too, which
+    changes fixture setup/teardown order project-wide). Nothing needs
+    clearing on a stand-in function, so just skip it."""
+    cache_clear = getattr(retrieve._load_index, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def _clear_index_memo():
     """The lru_cache on _load_index is process-wide; make sure no test
     leaks a memoized index into the next one."""
-    retrieve._load_index.cache_clear()
+    _clear_load_index_cache()
     yield
-    retrieve._load_index.cache_clear()
+    _clear_load_index_cache()
 
 
 def test_cosine_topk(monkeypatch, tmp_path):
