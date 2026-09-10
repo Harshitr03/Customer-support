@@ -30,6 +30,13 @@ def stratified_sample(eval_df: pd.DataFrame, size: int, min_per_intent: int) -> 
         picked.append(grp.sample(take, random_state=config.SEED))
         logger.info("stratum %s: took %d (available %d)", intent, take, len(grp))
     base = pd.concat(picked)
+    if len(base) > size:
+        raise ValueError(
+            f"guaranteed per-intent minimum ({min_per_intent} x "
+            f"{df['pre_intent'].nunique()} observed intents = {len(base)}) exceeds "
+            f"requested size ({size}); the final .sample() would silently drop some "
+            f"intents below min_per_intent. Raise `size` or lower `min_per_intent`."
+        )
     remaining = df.drop(base.index)
     need = size - len(base)
     if need > 0 and len(remaining) > 0:
