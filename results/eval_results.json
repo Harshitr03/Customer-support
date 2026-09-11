@@ -1,0 +1,447 @@
+{
+  "classification": {
+    "trivial": {
+      "accuracy": 0.15,
+      "macro_f1": 0.037267080745341616,
+      "per_class_f1": {
+        "technical_bug": 0.0,
+        "account_access": 0.0,
+        "billing_subscription": 0.0,
+        "content_catalog": 0.0,
+        "cancellation_refund": 0.0,
+        "feature_complaint": 0.0,
+        "other": 0.2608695652173913
+      },
+      "confusion_matrix": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          37
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          27
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          31
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          21
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          9
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          45
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          30
+        ]
+      ],
+      "confusion_matrix_labels": [
+        "technical_bug",
+        "account_access",
+        "billing_subscription",
+        "content_catalog",
+        "cancellation_refund",
+        "feature_complaint",
+        "other"
+      ]
+    },
+    "simple_tfidf": {
+      "accuracy": 0.5,
+      "macro_f1": 0.5236014321558855,
+      "per_class_f1": {
+        "technical_bug": 0.6896551724137931,
+        "account_access": 0.782608695652174,
+        "billing_subscription": 0.5714285714285714,
+        "content_catalog": 0.32142857142857145,
+        "cancellation_refund": 0.5882352941176471,
+        "feature_complaint": 0.2692307692307692,
+        "other": 0.4426229508196721
+      },
+      "confusion_matrix": [
+        [
+          20,
+          0,
+          0,
+          9,
+          0,
+          0,
+          8
+        ],
+        [
+          0,
+          18,
+          0,
+          0,
+          1,
+          0,
+          8
+        ],
+        [
+          0,
+          1,
+          14,
+          0,
+          2,
+          0,
+          14
+        ],
+        [
+          0,
+          0,
+          0,
+          9,
+          0,
+          0,
+          12
+        ],
+        [
+          0,
+          0,
+          3,
+          0,
+          5,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          1,
+          15,
+          0,
+          7,
+          22
+        ],
+        [
+          1,
+          0,
+          0,
+          2,
+          0,
+          0,
+          27
+        ]
+      ],
+      "confusion_matrix_labels": [
+        "technical_bug",
+        "account_access",
+        "billing_subscription",
+        "content_catalog",
+        "cancellation_refund",
+        "feature_complaint",
+        "other"
+      ]
+    },
+    "llm": {
+      "accuracy": 0.79,
+      "macro_f1": 0.7910221625156805,
+      "per_class_f1": {
+        "technical_bug": 0.7857142857142857,
+        "account_access": 0.7777777777777778,
+        "billing_subscription": 0.7857142857142857,
+        "content_catalog": 0.8163265306122449,
+        "cancellation_refund": 0.8421052631578947,
+        "feature_complaint": 0.8372093023255814,
+        "other": 0.6923076923076923
+      },
+      "confusion_matrix": [
+        [
+          33,
+          2,
+          0,
+          0,
+          0,
+          2,
+          0
+        ],
+        [
+          3,
+          21,
+          0,
+          0,
+          1,
+          0,
+          2
+        ],
+        [
+          6,
+          2,
+          22,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          20,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          8,
+          0,
+          0
+        ],
+        [
+          2,
+          1,
+          3,
+          2,
+          0,
+          36,
+          1
+        ],
+        [
+          3,
+          0,
+          0,
+          6,
+          0,
+          3,
+          18
+        ]
+      ],
+      "confusion_matrix_labels": [
+        "technical_bug",
+        "account_access",
+        "billing_subscription",
+        "content_catalog",
+        "cancellation_refund",
+        "feature_complaint",
+        "other"
+      ]
+    }
+  },
+  "reply_quality": {
+    "trivial": {
+      "grounded": 4.35,
+      "factual": 4.483333333333333,
+      "tone": 4.1,
+      "actionable": 4.3,
+      "overall": 4.1
+    },
+    "nearest": {
+      "grounded": 4.216666666666667,
+      "factual": 4.416666666666667,
+      "tone": 4.05,
+      "actionable": 3.95,
+      "overall": 3.9166666666666665
+    },
+    "grounded": {
+      "grounded": 4.766666666666667,
+      "factual": 4.85,
+      "tone": 4.7,
+      "actionable": 4.333333333333333,
+      "overall": 4.583333333333333
+    }
+  },
+  "escalation": {
+    "end_to_end": {
+      "precision": 0.7910447761194029,
+      "recall": 0.8153846153846154,
+      "accuracy": 0.87,
+      "tp": 53,
+      "fp": 14,
+      "fn": 12,
+      "tn": 121,
+      "escalate_rate": 0.335
+    },
+    "policy_only": {
+      "precision": 0.8732394366197183,
+      "recall": 0.9538461538461539,
+      "accuracy": 0.94,
+      "tp": 62,
+      "fp": 9,
+      "fn": 3,
+      "tn": 126,
+      "escalate_rate": 0.355
+    },
+    "always_escalate": {
+      "precision": 0.325,
+      "recall": 1.0,
+      "accuracy": 0.325,
+      "tp": 65,
+      "fp": 135,
+      "fn": 0,
+      "tn": 0,
+      "escalate_rate": 1.0
+    },
+    "never_escalate": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "accuracy": 0.675,
+      "tp": 0,
+      "fp": 0,
+      "fn": 65,
+      "tn": 135,
+      "escalate_rate": 0.0
+    },
+    "simple_tfidf": {
+      "precision": 0.8571428571428571,
+      "recall": 0.6461538461538462,
+      "accuracy": 0.85,
+      "tp": 42,
+      "fp": 7,
+      "fn": 23,
+      "tn": 128,
+      "escalate_rate": 0.245
+    },
+    "gold_escalate_rate": 0.325
+  },
+  "bootstrap_ci": {
+    "classification_accuracy": {
+      "trivial": {
+        "lo": 0.105,
+        "hi": 0.205,
+        "mean": 0.149575
+      },
+      "simple_tfidf": {
+        "lo": 0.42,
+        "hi": 0.57,
+        "mean": 0.49881
+      },
+      "llm": {
+        "lo": 0.735,
+        "hi": 0.845,
+        "mean": 0.789815
+      }
+    },
+    "classification_macro_f1": {
+      "trivial": {
+        "lo": 0.027149321266968323,
+        "hi": 0.04860699466508595,
+        "mean": 0.037048904763927144
+      },
+      "simple_tfidf": {
+        "lo": 0.4391108093985894,
+        "hi": 0.5923990697492667,
+        "mean": 0.5173937684827278
+      },
+      "llm": {
+        "lo": 0.7262260013737769,
+        "hi": 0.8482376592594776,
+        "mean": 0.7878472037385368
+      }
+    },
+    "reply_overall": {
+      "trivial": {
+        "lo": 3.8333333333333335,
+        "hi": 4.366666666666666,
+        "mean": 4.103316666666666
+      },
+      "nearest": {
+        "lo": 3.65,
+        "hi": 4.183333333333334,
+        "mean": 3.9112666666666662
+      },
+      "grounded": {
+        "lo": 4.366666666666666,
+        "hi": 4.750416666666666,
+        "mean": 4.582933333333333
+      }
+    },
+    "escalation_precision": {
+      "end_to_end": {
+        "lo": 0.6896269078575467,
+        "hi": 0.876969696969697,
+        "mean": 0.7866113886615751
+      },
+      "policy_only": {
+        "lo": 0.787484631147541,
+        "hi": 0.9375240384615384,
+        "mean": 0.8698362385418682
+      }
+    },
+    "escalation_recall": {
+      "end_to_end": {
+        "lo": 0.7187057783018868,
+        "hi": 0.9032258064516129,
+        "mean": 0.8145313303644277
+      },
+      "policy_only": {
+        "lo": 0.8933076923076922,
+        "hi": 1.0,
+        "mean": 0.9532961619234529
+      }
+    }
+  },
+  "metadata": {
+    "n_golden": 200,
+    "n_reply_subset": 60,
+    "n_spotcheck": 40,
+    "gen_model": "gemini-3.5-flash-lite",
+    "gen_thinking": {
+      "thinking_level": "low"
+    },
+    "embed_model": "gemini-embedding-001",
+    "kb_size": 3800,
+    "seed": 42,
+    "bootstrap_n": 1000,
+    "bootstrap_seed": 42,
+    "judge_parse_failures": {
+      "trivial": 0,
+      "nearest": 0,
+      "grounded": 0
+    },
+    "judge_stats_note": "judge_parse_failures counts, per system, how many of the n_reply_subset judge calls had a judge_parse_ok=False response (unparseable JSON, a missing key, or a non-numeric value) -- see reply_rows.csv's judge_parse_ok column for which rows. reply_quality means and the reply_overall bootstrap CIs above are computed over parse_ok rows only; a parse failure's clamped fallback scores (all 3s) are written to reply_rows.csv but excluded from both.",
+    "escalation_baselines_note": "policy_only and simple_tfidf both call decide() with confidence pinned to 1.0, which disables decide()'s low-confidence escalation rule entirely (1.0 is never below CONF_THRESHOLD). So end_to_end minus policy_only isn't purely 'what the low-confidence rule adds' -- it mixes that rule's effect with ordinary classifier error (end_to_end uses the LLM's own predicted intent and confidence, which can differ from gold_intent even before the confidence rule ever fires).",
+    "fingerprint": {
+      "classify_prompt_sha256": "bd0ce68a2cf86466f057073d607dc37e5bb2c9b1d774a54f39ee70b041a6749f",
+      "grounded_prompt_sha256": "b9329704159bfd7f6c259067421189bef46a7c10ee59ae7e4afc5a98bfd02301",
+      "judge_prompt_sha256": "6922865ade554a4058f489e7ff6e04bbfefb5a6a9cc3776e81164c590ff3f0f9",
+      "canned_replies_sha256": "105480d6d88f1cfecf0da4df9dd02fdd7f821aee9868416650e22c2ba3b15661",
+      "kb_meta_sha256": "dfae736f4f8860298dfeae270fb4d9c55683f5e8e7e638b2bb9c2c4f915db3d1",
+      "golden_eval_sha256": "a4c2326d4529c248d93f138623d20de1cd7df57cd8fc808978049c59319ca4f3"
+    }
+  }
+}
