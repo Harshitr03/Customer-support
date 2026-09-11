@@ -45,6 +45,61 @@ def test_generate_caches(tmp_path, monkeypatch):
     assert calls["n"] == 1
 
 
+def test_raw_generate_uses_configured_thinking_level(monkeypatch):
+    """_raw_generate must build its ThinkingConfig from config.GEN_THINKING
+    (read at call time), not a hard-coded thinking_budget=0 -- 3.5
+    Flash-Lite rejects thinking_budget=0 with a 400 INVALID_ARGUMENT."""
+    captured = {}
+
+    class FakeModels:
+        def generate_content(self, model, contents, config):
+            captured["config"] = config
+
+            class Resp:
+                text = "ok"
+            return Resp()
+
+    class FakeClient:
+        models = FakeModels()
+
+    monkeypatch.setattr(lc, "_get_client", lambda: FakeClient())
+    monkeypatch.setattr(lc.config, "GEN_THINKING", {"thinking_level": "low"})
+
+    result = lc._raw_generate("hi", 0.2, lc.config.GEN_MODEL, False)
+
+    assert result == "ok"
+    thinking_config = captured["config"].thinking_config
+    assert thinking_config.thinking_level.value.lower() == "low"
+    assert thinking_config.thinking_budget is None
+
+
+def test_generate_cache_key_changes_with_thinking_setting(tmp_path, monkeypatch):
+    """Two generate() calls that differ only in config.GEN_THINKING must
+    never share a cache entry."""
+    monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path)
+    calls = {"n": 0}
+
+    def fake_raw(prompt, temperature, model, json_mode):
+        calls["n"] += 1
+        return f"response-{calls['n']}"
+
+    monkeypatch.setattr(lc, "_raw_generate", fake_raw)
+
+    monkeypatch.setattr(lc.config, "GEN_THINKING", {"thinking_level": "low"})
+    r1 = lc.generate("hi")
+    assert calls["n"] == 1
+
+    monkeypatch.setattr(lc.config, "GEN_THINKING", {"thinking_level": "high"})
+    r2 = lc.generate("hi")
+    assert calls["n"] == 2  # different thinking setting -> cache miss
+    assert r2 != r1
+
+    monkeypatch.setattr(lc.config, "GEN_THINKING", {"thinking_level": "low"})
+    r3 = lc.generate("hi")
+    assert calls["n"] == 2  # back to the original setting -> its own cache hit
+    assert r3 == r1
+
+
 def test_embed_caches_per_text(tmp_path, monkeypatch):
     monkeypatch.setattr(lc.config, "CACHE_DIR", tmp_path)
 
@@ -343,7 +398,10 @@ def test_generate_replay_fallback_no_network_and_replay_readonly(tmp_path, monke
     monkeypatch.setattr(lc.config, "CACHE_DIR", cache_dir)
     monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
 
-    key = json.dumps({"m": lc.config.GEN_MODEL, "p": "hi", "t": 0.2, "j": False})
+    key = json.dumps(
+        {"m": lc.config.GEN_MODEL, "p": "hi", "t": 0.2, "j": False, "k": lc.config.GEN_THINKING},
+        sort_keys=True,
+    )
     path = lc._cache_path("gen", key)
     (replay_dir / path.name).write_text(json.dumps({"text": "replayed"}))
 
@@ -404,7 +462,10 @@ def test_offline_guard_does_not_block_cache_hits(tmp_path, monkeypatch):
     monkeypatch.setattr(lc.config, "CACHE_DIR", cache_dir)
     monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
 
-    key = json.dumps({"m": lc.config.GEN_MODEL, "p": "hi", "t": 0.2, "j": False})
+    key = json.dumps(
+        {"m": lc.config.GEN_MODEL, "p": "hi", "t": 0.2, "j": False, "k": lc.config.GEN_THINKING},
+        sort_keys=True,
+    )
     path = lc._cache_path("gen", key)
     (replay_dir / path.name).write_text(json.dumps({"text": "replayed"}))
 
@@ -467,7 +528,10 @@ def test_generate_ignores_replay_cache_when_no_replay_env_set(tmp_path, monkeypa
     monkeypatch.setattr(lc.config, "REPLAY_CACHE_DIR", replay_dir)
     monkeypatch.setenv("SUPPORT_AGENT_NO_REPLAY", "1")
 
-    key = json.dumps({"m": lc.config.GEN_MODEL, "p": "hi", "t": 0.2, "j": False})
+    key = json.dumps(
+        {"m": lc.config.GEN_MODEL, "p": "hi", "t": 0.2, "j": False, "k": lc.config.GEN_THINKING},
+        sort_keys=True,
+    )
     path = lc._cache_path("gen", key)
     (replay_dir / path.name).write_text(json.dumps({"text": "stale replay"}))
 

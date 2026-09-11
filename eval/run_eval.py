@@ -297,7 +297,7 @@ def build_blind_human_scoring(spotcheck: pd.DataFrame, reply_rows: pd.DataFrame,
 
 def _classify_cache_key(message: str) -> str:
     prompt = classify._CLS_PROMPT.format(taxonomy=classify.describe(), message=message)
-    return json.dumps({"m": config.GEN_MODEL, "p": prompt, "t": 0.2, "j": True})
+    return llm_client.gen_cache_key(config.GEN_MODEL, prompt, 0.2, True)
 
 
 def _is_cached_anywhere(path) -> bool:
@@ -360,7 +360,7 @@ def _cached_grounded_reply(message: str, pred_intent):
     if examples is None:
         return None
     prompt = _grounded_prompt(message, pred_intent, examples)
-    key = json.dumps({"m": config.GEN_MODEL, "p": prompt, "t": 0.3, "j": False})
+    key = llm_client.gen_cache_key(config.GEN_MODEL, prompt, 0.3, False)
     if not _is_gen_cached(key):
         return None
     return draft_reply.grounded_reply(message, pred_intent, examples=examples)
@@ -368,7 +368,7 @@ def _cached_grounded_reply(message: str, pred_intent):
 
 def _is_judge_cached(message: str, reply: str, reference: str) -> bool:
     prompt = _JUDGE_RUBRIC.format(reference=reference, message=message, reply=reply)
-    key = json.dumps({"m": config.GEN_MODEL, "p": prompt, "t": 0.0, "j": True})
+    key = llm_client.gen_cache_key(config.GEN_MODEL, prompt, 0.0, True)
     return _is_gen_cached(key)
 
 
@@ -682,6 +682,7 @@ def main(estimate_only: bool = False) -> dict:
         "n_reply_subset": len(subset),
         "n_spotcheck": int(subset["in_spotcheck"].sum()),
         "gen_model": config.GEN_MODEL,
+        "gen_thinking": config.GEN_THINKING,
         "embed_model": config.EMBED_MODEL,
         "kb_size": config.KB_SIZE,
         "seed": config.SEED,

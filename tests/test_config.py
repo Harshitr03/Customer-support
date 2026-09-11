@@ -5,7 +5,8 @@ from support_agent import config
 def test_config_constants():
     assert config.SEED == 42
     assert config.POOL_SIZE == 6000
-    assert config.GEN_MODEL == "gemini-3.5-flash"
+    assert config.GEN_MODEL == "gemini-3.5-flash-lite"
+    assert config.GEN_THINKING == {"thinking_level": "low"}
     assert config.EMBED_MODEL == "gemini-embedding-001"
     assert config.RAW_CSV.name == "twcs.csv"
 

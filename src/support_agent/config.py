@@ -12,7 +12,11 @@ GOLDEN_SIZE = 200
 GOLDEN_MIN_PER_INTENT = 10
 BRAND = "SpotifyCares"
 
-GEN_MODEL = "gemini-3.5-flash"
+GEN_MODEL = "gemini-3.5-flash-lite"
+# 3.5 Flash-Lite rejects types.ThinkingConfig(thinking_budget=0) with a 400
+# INVALID_ARGUMENT; "low" is the minimum thinking_level it accepts. Passed
+# straight to types.ThinkingConfig(**GEN_THINKING) in llm_client._raw_generate.
+GEN_THINKING = {"thinking_level": "low"}
 EMBED_MODEL = "gemini-embedding-001"
 EMBED_DIM = 768
 EMBED_BATCH = 100

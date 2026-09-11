@@ -357,7 +357,7 @@ def test_estimate_calls_subtracts_provably_cached(tmp_path, monkeypatch):
         f"- {draft_reply.clean_reply(e['customer_open'])} -> {draft_reply.clean_reply(e['spotify_reply'])}"
         for e in fake_examples)
     prompt = draft_reply._GEN_PROMPT.format(intent="other", examples=ex_block, message=message)
-    gkey = json.dumps({"m": run_eval.config.GEN_MODEL, "p": prompt, "t": 0.3, "j": False})
+    gkey = run_eval.llm_client.gen_cache_key(run_eval.config.GEN_MODEL, prompt, 0.3, False)
     run_eval.llm_client._cache_path("gen", gkey).write_text(json.dumps({"text": "Thanks! ^S"}))
     est3 = run_eval.estimate_calls(golden, eval_df)
     assert est3["grounded_replies"]["uncached_upper_bound"] == 0
@@ -372,7 +372,7 @@ def test_estimate_calls_subtracts_provably_cached(tmp_path, monkeypatch):
     grounded_reply = "Thanks! ^S"
     for reply in (trivial_reply, nearest_reply, grounded_reply):
         jprompt = _RUBRIC.format(reference=reference, message=message, reply=reply)
-        jkey = json.dumps({"m": run_eval.config.GEN_MODEL, "p": jprompt, "t": 0.0, "j": True})
+        jkey = run_eval.llm_client.gen_cache_key(run_eval.config.GEN_MODEL, jprompt, 0.0, True)
         run_eval.llm_client._cache_path("gen", jkey).write_text(json.dumps({"text": "{}"}))
     est4 = run_eval.estimate_calls(golden, eval_df)
     assert est4["judge_calls"]["uncached_upper_bound"] == 0

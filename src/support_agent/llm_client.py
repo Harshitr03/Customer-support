@@ -237,7 +237,7 @@ def _raw_generate(prompt: str, temperature: float, model: str, json_mode: bool) 
     cfg = types.GenerateContentConfig(
         temperature=temperature,
         response_mime_type="application/json" if json_mode else "text/plain",
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
+        thinking_config=types.ThinkingConfig(**config.GEN_THINKING),
     )
 
     def call():
@@ -260,10 +260,24 @@ def _raw_embed(texts: list[str]) -> np.ndarray:
     return _retry_with_backoff(call)
 
 
+def gen_cache_key(model: str, prompt: str, temperature: float, json_mode: bool) -> str:
+    """Deterministic cache key for a generate() call, serialized with
+    sorted keys. Includes config.GEN_THINKING (read at call time) so two
+    calls that differ only in thinking settings never share a cache entry.
+    generate() itself and eval/run_eval.py's --estimate cache-hit checks
+    (_classify_cache_key etc.) both call this, so the local-cache lookup,
+    the replay-cache fallback, and --estimate's provable-cache-hit
+    detection all agree on what's actually cached."""
+    return json.dumps(
+        {"m": model, "p": prompt, "t": temperature, "j": json_mode, "k": config.GEN_THINKING},
+        sort_keys=True,
+    )
+
+
 def generate(prompt: str, *, json_mode: bool = False, temperature: float = 0.2,
              model: str | None = None) -> str:
     model = model or config.GEN_MODEL
-    key = json.dumps({"m": model, "p": prompt, "t": temperature, "j": json_mode})
+    key = gen_cache_key(model, prompt, temperature, json_mode)
     path = _cache_path("gen", key)
     if path.exists():
         logger.debug("generate: cache hit (model=%s)", model)
