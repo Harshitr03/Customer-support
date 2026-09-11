@@ -24,7 +24,7 @@ The non-obvious decisions behind this agent, and why. Each one names what it cos
 
 8. **Retrieval uses Gemini embeddings and numpy cosine similarity, with no vector database.** A few thousand 768-dimensional vectors fit in memory. Keeping the index as a committed `.npy` file keeps the repo small and the retrieval step easy to read. 768 dimensions (instead of 3,072) keeps the committed index at about 6 MB.
 
-9. **The retrieval index covers a capped slice of history (`KB_SIZE`, 2,000 threads at the time of the reported run).** Gemini's free tier allows 1,000 embeddings per day per project, so I embedded a prefix of the shuffled history rather than wait days or pay. The index is sized to what's embedded and grows by raising `KB_SIZE`. *Cost if wrong:* rarer issues have fewer close historical matches, which understates the grounded system's quality.
+9. **The retrieval index covers a capped slice of history (`KB_SIZE`, 2,900 of 5,400 threads for the reported run).** Gemini's free tier allows 1,000 embeddings per day per project, so I embedded a prefix of the shuffled history rather than wait days or pay. The index is sized to what's embedded and grows by raising `KB_SIZE`. *Cost if wrong:* rarer issues have fewer close historical matches, which understates the grounded system's quality.
 
 10. **The judge compares against Spotify's real reply to that same message.** The plan used the nearest retrieved reply as the judge's reference, which is exactly what the "copy the nearest reply" baseline outputs, so that baseline would have graded itself. The golden thread's own reply comes from the held-out pool, so no system could have seen it. The judge never learns which system wrote a reply.
 
