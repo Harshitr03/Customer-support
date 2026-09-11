@@ -75,3 +75,68 @@ def test_disputed_charge_escalates_with_risk_reason():
 def test_charged_back_message_escalates_with_risk_reason():
     e, reason = esc.decide("billing_subscription", 0.95, [], "I charged back the payment")
     assert e and "risk language" in reason
+
+
+# --- tried_fixes rule (Task 15) ---
+
+def test_tried_everything_escalates_with_tried_fixes_reason():
+    e, reason = esc.decide(
+        "technical_bug", 0.9, [],
+        "I have tried everything! My Spotify keeps connecting to other devices",
+    )
+    assert e and "standard troubleshooting already failed" in reason
+
+
+def test_already_tried_browsers_escalates_with_tried_fixes_reason():
+    e, reason = esc.decide(
+        "technical_bug", 0.9, [],
+        "I already tried 2 different browsers and it still won't load",
+    )
+    assert e and "standard troubleshooting already failed" in reason
+
+
+def test_still_happening_escalates_with_tried_fixes_reason():
+    e, reason = esc.decide(
+        "technical_bug", 0.9, [],
+        "the app keeps pausing, still happening after the update",
+    )
+    assert e and "standard troubleshooting already failed" in reason
+
+
+def test_curly_apostrophe_ive_tried_escalates_with_tried_fixes_reason():
+    e, reason = esc.decide(
+        "technical_bug", 0.9, [],
+        "I’ve tried reinstalling it",
+    )
+    assert e and "standard troubleshooting already failed" in reason
+
+
+def test_single_fix_mention_does_not_trigger_tried_fixes():
+    e, reason = esc.decide(
+        "technical_bug", 0.9, [],
+        "I reinstalled the app and now it crashes",
+    )
+    assert not e and "standard troubleshooting already failed" not in reason
+
+
+def test_feature_complaint_does_not_trigger_tried_fixes():
+    e, reason = esc.decide("feature_complaint", 0.9, [], "the new shuffle is terrible")
+    assert not e and "standard troubleshooting already failed" not in reason
+
+
+def test_tried_fixes_language_loses_to_risk_language():
+    e, reason = esc.decide(
+        "other", 0.9, [],
+        "I already tried everything, I'm going to sue",
+    )
+    assert e and "risk language" in reason
+
+
+def test_tried_fixes_language_loses_to_sensitive_intent():
+    e, reason = esc.decide("billing_subscription", 0.9, [], "tried everything")
+    assert e and "sensitive intent" in reason
+
+
+def test_tried_fixes_wins_over_low_confidence():
+    e, reason = esc.decide("technical_bug", 0.2, [], "tried everything")
+    assert e and "standard troubleshooting already failed" in reason

@@ -38,6 +38,19 @@ _RISK = re.compile(r"\b(su(e|ed|es|ing)|lawsuit(s)?|legal|fraud(ulent)?|"
                    r"stolen|unauthori[sz]ed|disput(e|es|ed|ing)|"
                    r"charge[ds]?\s*back)\b", re.I)
 
+# Mined from the 5,400-thread history (corpus_pool), not the golden set.
+# On non-billing, non-account messages, Spotify's actual reply asked for a DM
+# or the account email 64% of the time when the customer signaled exhaustion
+# ("tried everything", "already tried", "still happening") vs. 29% baseline
+# and 26% for a bare single-fix mention ("I reinstalled"). So this rule fires
+# on exhaustion language only, not on the bare mention of one fix.
+_TRIED_FIXES = re.compile(
+    r"\b(tried everything|already tried|i['’]?ve tried|have tried|tried all|nothing works|"
+    r"no success|no luck|still (happening|occurring|not working|doesn['’]?t work|"
+    r"isn['’]?t working|won['’]?t \w+|the same|getting)|same (issue|problem|error))\b",
+    re.I,
+)
+
 
 def decide(intent: str, confidence: float, turns: list[dict], message: str) -> tuple[bool, str]:
     """Decide whether to escalate a message to a human, with a human-readable reason."""
@@ -47,6 +60,9 @@ def decide(intent: str, confidence: float, turns: list[dict], message: str) -> t
     elif intent in ESCALATE_INTENTS:
         escalate, reason = True, f"Escalate: '{intent}' is a sensitive intent (account/billing/cancellation)."
         rule = "sensitive_intent"
+    elif _TRIED_FIXES.search(message or ""):
+        escalate, reason = True, "Escalate: customer reports standard troubleshooting already failed."
+        rule = "tried_fixes"
     elif confidence < CONF_THRESHOLD:
         escalate, reason = True, f"Escalate: classifier confidence {confidence:.2f} below {CONF_THRESHOLD}."
         rule = "low_confidence"
