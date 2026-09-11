@@ -34,7 +34,7 @@ The non-obvious decisions behind this agent, and why. Each one names what it cos
 
 13. **Human-vs-judge agreement is scored blind.** The human scores 40 reply pairs, rotated across the three systems, without seeing the judge's score or which system wrote the reply, so the judge can't anchor the human. I report agreement as binned Cohen's kappa, quadratic-weighted kappa, Spearman correlation, and exact and within-one agreement, with a bootstrap confidence interval.
 
-14. **Results reproduce offline in seconds.** Every LLM and embedding call goes through a content-hash disk cache. The exact responses behind the reported numbers are committed as a read-only replay cache, and an offline guard makes the default demo unable to reach the API. A grader reproduces the headline numbers with no key and no cost. `--live` recomputes everything.
+14. **Results reproduce offline in seconds.** Every LLM and embedding call goes through a content-hash disk cache. The exact responses behind the reported numbers are committed as a read-only replay cache, and an offline guard makes the default demo unable to reach the API. A grader reproduces the headline numbers with no key and no cost. `--live` calls the API only for responses that aren't already cached locally or in the replay cache. `--live --no-replay` ignores the committed replay cache; also delete `data/cache/` for a from-scratch recompute, which won't be bit-identical because generation runs at temperature 0.2–0.3.
 
 15. **Cost is controlled by design.**
     - Gemini 2.5 Flash runs with its thinking budget set to 0; the tasks are short.
