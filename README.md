@@ -110,6 +110,47 @@ python scripts/run_demo.py --live --export-cache
 pytest -q          # all unit tests, no network (every LLM/embedding call is mocked)
 ```
 
+## Demo UI (optional)
+
+A small local Streamlit app ("Support Agent Console") for demoing the
+agent and exploring the evaluation results interactively. It's a demo
+tool, not part of the deliverable — the evaluation in `report/` is.
+
+```bash
+pip install -e ".[ui]"
+streamlit run app/streamlit_app.py
+```
+
+- **"Try a message"** — pick from the golden-set messages whose full
+  pipeline response (classify, the query embedding, and the grounded
+  reply) is already cached, or type your own, then run the agent and see
+  the verdict, intent, drafted reply, and the retrieved evidence it was
+  grounded on.
+- **"Results"** — reads `results/eval_results.json` and the per-row CSVs
+  written by `python -m eval.run_eval`; shows an empty state if `results/`
+  doesn't exist yet.
+
+**Offline by default, zero network calls** — same replay-cache model as
+`scripts/run_demo.py`: picking a cached example and running it never hits
+the network. Typing a brand-new message does need a live call, so it only
+works when the app is started with `-- --live`:
+
+```bash
+streamlit run app/streamlit_app.py -- --live   # needs GEMINI_API_KEY, uses API quota
+```
+
+`streamlit` is an optional extra (`ui`), not a core dependency, and isn't
+in `requirements.lock` — that lock file is generated from `pip install -e
+".[dev]"` (see below), which the UI extra is deliberately outside of, so
+installing the UI never pulls streamlit into the reproducible core
+environment.
+
+This demo does not use Spotify's logo, wordmark, icon, or brand font, and
+does not reuse Spotify's brand green. It shows this note in the app:
+
+> Demo built on public SpotifyCares tweets from a Kaggle dataset. Not
+> affiliated with Spotify.
+
 ## What is committed and why
 
 - `data/golden/` — the golden evaluation set (`golden_eval.csv`) plus

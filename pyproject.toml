@@ -14,6 +14,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=9.1.1"]
+# Optional local demo UI (Task 17). Not a core dependency -- install with
+# `pip install -e ".[ui]"`. Lower bound pinned to the version installed and
+# tested against (streamlit>=1.63.0 pulled in altair as a transitive dep,
+# used for the "Results" tab's per-intent bar chart -- no extra dependency
+# added beyond what streamlit itself installs).
+ui = ["streamlit>=1.63.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
