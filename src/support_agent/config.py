@@ -12,7 +12,7 @@ GOLDEN_SIZE = 200
 GOLDEN_MIN_PER_INTENT = 10
 BRAND = "SpotifyCares"
 
-GEN_MODEL = "gemini-2.5-flash"
+GEN_MODEL = "gemini-3.5-flash"
 EMBED_MODEL = "gemini-embedding-001"
 EMBED_DIM = 768
 EMBED_BATCH = 100
