@@ -156,13 +156,14 @@ does not reuse Spotify's brand green. It shows this note in the app:
 - `data/golden/` — the golden evaluation set (`golden_eval.csv`) plus
   labeling notes and rubric (`eval/golden_labeling_notes.md`). Gold labels
   were drafted by Claude (an AI assistant) against the written rubric, not
-  independently hand-labeled by a human from scratch, and are reviewed by
-  the author before the evaluation is run — see "Honest caveats" below for
-  the review status and what to spot-check first.
-- `data/kb/` — the retrieval index (embedded vectors + metadata) over the
-  first `KB_SIZE` corpus threads. Capped there by the Gemini free-tier
-  embedding quota, not by design — it covers a subset of the full corpus,
-  not all of history.
+  independently hand-labeled by a human from scratch, and were then
+  reviewed by the author across all 200 rows (11 annotated, 4 labels
+  changed) — see "Honest caveats" below for the review record and what to
+  re-check first.
+- `data/kb/` — the retrieval index (embedded vectors + metadata) over all
+  `KB_SIZE` = 5,400 history threads. It was capped at 3,800 for the first
+  runs by the Gemini free-tier embedding quota, not by design, and now
+  covers the full corpus.
 - `data/llm_cache/` — the replay cache: the exact LLM and embedding
   responses behind the reported headline numbers, keyed by a hash of each
   call's parameters. This is what makes `python scripts/run_demo.py`

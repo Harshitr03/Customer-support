@@ -24,8 +24,8 @@
   against the written rubric below, independent of any model prediction -- the
   `pre_*` prefill is never consulted while drafting the gold label, only used
   afterward as a diff to sanity-check disagreement counts. `gold_reason` is a
-  short free-text note explaining the escalation call. Every row is reviewed by
-  the author before the evaluation is run; see "Author review" below.
+  short free-text note explaining the escalation call. All 200 rows were
+  reviewed by the author before the reported run; see "Author review" below.
   - **Intent rubric:** the intent definitions in `src/support_agent/taxonomy.py`
     (the single source of truth for what each intent name means).
   - **Escalation rubric:** `report/DECISION_LOG.md` item 7, quoted here in full
