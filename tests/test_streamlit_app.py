@@ -9,6 +9,10 @@ import json
 from pathlib import Path
 
 import pytest
+
+# Streamlit is an optional extra ([ui]); a grader running plain `pytest` after
+# `pip install -e ".[dev]"` must not hit a collection error for the demo UI.
+pytest.importorskip("streamlit", reason="install the optional [ui] extra to test the demo UI")
 from streamlit.testing.v1 import AppTest
 
 from eval import run_eval

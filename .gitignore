@@ -17,7 +17,14 @@ venv/
 
 # generated artifacts (reproducible via pipeline, kept out of git except curated ones under data/golden)
 data/raw
-data/interim/
+# Ignore the directory's *contents*, not the directory itself -- git cannot
+# re-include a file whose parent directory is excluded, so the two negations
+# below only work with the `/*` form.
+data/interim/*
+# The two processed pools ARE committed: 2.2MB buys a keyless, dataset-free
+# reproduction on a fresh clone (the raw 516MB CSV stays out of git).
+!data/interim/corpus_pool.parquet
+!data/interim/eval_pool.parquet
 data/cache/
 *.log
 
