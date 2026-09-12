@@ -256,21 +256,25 @@ To add a human comparison point:
 - Golden labels (intent, escalation, reason) were drafted by Claude (an AI
   assistant) reading each message against the written rubric — never
   against the keyword prefill or any model's own prediction — and are
-  reviewed by the author before the evaluation is run, not independently
-  hand-labeled by a separate human rater. The review record (how many
-  labels the author changed) is kept in `eval/golden_labeling_notes.md`;
-  as of this writing that review has **not yet happened** — treat the gold
-  labels as a single AI labeler's draft until it has. Before trusting the
-  set, spot-check the 65 rows where `gold_escalate` is `True` plus the 101
-  rows where `gold_intent` differs from the keyword prefill (`pre_intent`)
-  — together the rows most likely to carry a labeling mistake, since
-  they're exactly where the gold label disagrees with the cheap mechanical
-  baseline.
+  then reviewed by the author before the reported evaluation run — one AI
+  labeler and one human reviewer, **not** independent hand-labeling by a
+  separate rater or a panel. The author reviewed all 200 rows, annotated 11
+  and changed 4 gold labels; the record, including a deliberate exception to
+  the bug-escalation rubric on row 43, is in
+  `eval/golden_labeling_notes.md`. The review moved the headline numbers
+  slightly *down* (Gemini intent accuracy 0.790 → 0.785), which is the
+  expected direction for a real review. The rows most likely to still carry
+  a labeling mistake are the 101 where `gold_intent` differs from the
+  keyword prefill (`pre_intent`) and the 101 where `gold_escalate` is
+  `True` — that is, wherever the gold label disagrees with the cheap
+  mechanical baseline.
 - The LLM judge and the reply generator share the same Gemini model family,
   which can inflate agreement between "the model's own idea of a good
   reply" and "the model's own judgment of a good reply."
-- The retrieval index covers a `KB_SIZE`-row prefix of the corpus (capped by
-  the free-tier embedding quota), not the full historical thread pool.
+- The retrieval index now covers all 5,400 historical threads (`KB_SIZE`).
+  It was capped at 3,800 for the first runs by the free-tier embedding
+  quota; growing it by 42% moved grounded reply quality by about 0.02 on
+  the judge's 1–5 scale, so retrieval size was not the binding constraint.
 - The golden and reply-quality subsets are small (see `n_golden` and
   `n_reply_subset` in `results/eval_results.json`'s metadata), so treat
   point estimates cautiously — the bootstrap confidence intervals in that

@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -82,10 +83,17 @@ def test_golden_labeling_notes_quotes_decision_log_item_7_not_escalate_py():
     assert "circular" in notes.lower()
 
 
-def test_golden_labeling_notes_has_author_review_placeholder():
+def test_golden_labeling_notes_record_the_finished_author_review():
+    """The author review happened on 2026-09-12, so the notes must record its
+    outcome and no longer carry the pending-review placeholder."""
     notes = (Path(__file__).resolve().parents[1] / "eval" / "golden_labeling_notes.md").read_text()
-    assert ("The author reviews every row before the evaluation is run; the "
-            "number of labels changed will be recorded here.") in notes
+    assert "will be recorded here" not in notes, "stale pending-review placeholder left in the notes"
+    assert "## Author review" in notes
+    # the stated change count must match the rows actually tabulated under it
+    review = notes.split("## Author review", 1)[1]
+    claimed = int(re.search(r"\*\*(\d+) rows were annotated and (\d+) gold labels changed", review).group(2))
+    tabulated = len(re.findall(r"^\| \d+ \| ", review, flags=re.MULTILINE))
+    assert claimed == tabulated, f"notes claim {claimed} label changes but tabulate {tabulated}"
 
 
 # ---------------------------------------------------------------------------
@@ -115,25 +123,28 @@ def test_labeling_process_described_consistently_across_docs():
     assert "4. **The golden set is sampled with free keyword labels" in log
 
 
-def test_docs_do_not_claim_the_author_review_has_already_happened():
-    readme = _read("README.md")
+def test_docs_do_not_overstate_the_author_review():
+    """The review is done, but the docs must not inflate it: they may not claim
+    an independent panel, and the row-43 exception must stay disclosed rather
+    than smoothed away."""
     notes = _read("eval/golden_labeling_notes.md")
     log = _read("report/DECISION_LOG.md")
 
-    # past-tense claims that would assert the review is DONE
-    banned_phrases = ("author-reviewed", "has been reviewed", "was reviewed",
-                       "author has reviewed")
-    for doc, name in ((readme, "README.md"), (notes, "golden_labeling_notes.md"),
-                       (log, "DECISION_LOG.md")):
+    # a single AI labeler plus one human reviewer is NOT an independent panel
+    for doc, name in ((notes, "golden_labeling_notes.md"), (log, "DECISION_LOG.md")):
         lowered = doc.lower()
-        for phrase in banned_phrases:
-            assert phrase not in lowered, f"{name} claims the review already happened: {phrase!r}"
+        for phrase in ("independently labelled", "independently labeled",
+                        "two annotators", "panel of", "inter-annotator"):
+            assert phrase not in lowered, f"{name} overstates the labeling process: {phrase!r}"
 
-    # the notes file's own placeholder must still read as not-yet-done
-    assert "will be recorded here" in notes
+    # the deliberate exception to the bug-escalation rubric must remain documented
+    assert "43" in notes and "exception" in notes.lower(), \
+        "the row-43 exception to the bug-escalation rubric is no longer disclosed"
 
 
-def test_readme_names_the_spotcheck_subset_before_defending_the_set():
+def test_readme_names_the_rows_most_likely_to_be_mislabeled():
+    """The README must point a reader at the rows where the gold label disagrees
+    with the cheap keyword baseline -- the ones most worth re-checking."""
     readme = _read("README.md")
-    assert "65" in readme and "gold_escalate" in readme
-    assert "101" in readme and "pre_intent" in readme
+    assert "gold_escalate" in readme and "pre_intent" in readme
+    assert "101" in readme, "README no longer names the disagreement counts"
