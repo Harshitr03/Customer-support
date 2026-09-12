@@ -10,7 +10,11 @@ logger = logging.getLogger(__name__)
 
 # Renamed from the original taxonomy names (playback_bug -> technical_bug,
 # account_login -> account_access) after reviewing real data.
-ESCALATE_INTENTS = {"account_access", "billing_subscription", "cancellation_refund"}
+#
+# technical_bug escalates by default too: a support agent can rarely resolve
+# a bug report from the first reply alone, so routing it straight to a human
+# beats drafting a reply likely to need a follow-up anyway.
+ESCALATE_INTENTS = {"technical_bug", "account_access", "billing_subscription", "cancellation_refund"}
 CONF_THRESHOLD = 0.55
 MAX_UNRESOLVED_TURNS = 6  # 3+ back-and-forth rounds
 
@@ -58,7 +62,7 @@ def decide(intent: str, confidence: float, turns: list[dict], message: str) -> t
         escalate, reason = True, "Escalate: message contains legal/security/risk language."
         rule = "risk_language"
     elif intent in ESCALATE_INTENTS:
-        escalate, reason = True, f"Escalate: '{intent}' is a sensitive intent (account/billing/cancellation)."
+        escalate, reason = True, f"Escalate: '{intent}' is a sensitive intent (technical bug/account/billing/cancellation)."
         rule = "sensitive_intent"
     elif _TRIED_FIXES.search(message or ""):
         escalate, reason = True, "Escalate: customer reports standard troubleshooting already failed."

@@ -16,15 +16,20 @@ from support_agent.llm_client import OfflineModeError, QuotaExhaustedError
 APP_PATH = str(Path(__file__).resolve().parents[1] / "app" / "streamlit_app.py")
 
 FIXED_RESULT = {
-    "intent": "technical_bug",
+    # feature_complaint, not technical_bug: technical_bug now escalates by
+    # default (sensitive_intent rule), so it can no longer stand in for an
+    # auto-handled example -- this test's point is checking the UI renders
+    # the verdict/reason pipeline.handle() returns, not exercising a
+    # specific intent, so any genuinely auto-handling intent preserves that.
+    "intent": "feature_complaint",
     "confidence": 0.82,
-    "reply": "Sorry about that! Please DM us your device, OS, and app version so we can dig in.",
+    "reply": "Thanks for the feedback -- we've shared it with the team. DM us any details you'd like us to pass on.",
     "escalate": False,
-    "reason": "Auto-handle: 'technical_bug' with confidence 0.82, no risk signals.",
+    "reason": "Auto-handle: 'feature_complaint' with confidence 0.82, no risk signals.",
     "evidence": [
-        {"customer_open": "the app keeps crashing", "spotify_reply": "please DM us your device info",
+        {"customer_open": "the new shuffle is terrible", "spotify_reply": "thanks, we've shared it with the team",
          "score": 0.83},
-        {"customer_open": "songs stop after a few seconds", "spotify_reply": "try reinstalling the app",
+        {"customer_open": "bring back the old playlist UI", "spotify_reply": "noted, passing this along",
          "score": 0.71},
     ],
 }
