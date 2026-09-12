@@ -25,9 +25,9 @@ EMBED_BATCH = 100
 EMBED_BATCH_INTERVAL_S = 61.0
 # Retrieval index size (corpus rows, in load_pools() order). Capped because
 # the free-tier embedding quota only covers a growing prefix of the corpus
-# (3,800/5,400 rows embedded so far); raise as more rows get embedded. Keep
-# this an int (not None) so build_index() never blocks on the full corpus.
-KB_SIZE = 3800
+# (all 5,400 rows are now embedded). Keep this an int (not None) so
+# build_index() never blocks on the full corpus.
+KB_SIZE = 5400
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
