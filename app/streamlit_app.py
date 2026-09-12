@@ -15,6 +15,17 @@ touch data/, results/, or report/; it only reads them.
 """
 import os
 import sys
+from pathlib import Path
+
+# `streamlit run app/streamlit_app.py` inserts this script's own directory
+# (app/) at sys.path[0], not the repo root, so `from app import ui_data`
+# below would fail with ModuleNotFoundError unless the root is also on the
+# path (pip install -e only registers src/support_agent, not this top-level
+# app/ package). Add it explicitly so the documented run command works
+# regardless of cwd/PYTHONPATH.
+_ROOT = str(Path(__file__).resolve().parent.parent)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 _LIVE = "--live" in sys.argv[1:]
 if not _LIVE:
@@ -49,6 +60,23 @@ st.markdown(
     .sa-note {
         color: #9BA3AE;
         font-size: 13px;
+    }
+
+    /* Type scale for Streamlit's own elements (brief: headings 20px/600,
+       captions 13px muted). Scoped to h3 so st.title's h1 is untouched --
+       st.subheader is the only heading level this app uses besides the
+       page title. Body text (st.write/st.markdown paragraphs) already
+       renders at 16px/400 by default, matching the brief's 15-16px/400,
+       so it's left alone. Verified against the actual rendered DOM
+       (data-testid="stHeading"/"stCaptionContainer" are Streamlit's own,
+       documented-stable test ids), not guessed. */
+    [data-testid="stHeading"] h3 {
+        font-size: 20px;
+        font-weight: 600;
+    }
+    [data-testid="stCaptionContainer"] {
+        font-size: 13px;
+        color: #9BA3AE;
     }
 
     .sa-verdict {
@@ -229,8 +257,14 @@ with tab_try:
                 f'</div>',
                 unsafe_allow_html=True,
             )
-            st.progress(bar_pct / 100)
-            st.caption(f"Similarity: {row['score']:.3f}")
+            bar_col, score_col = st.columns([6, 1])
+            with bar_col:
+                st.progress(bar_pct / 100)
+            with score_col:
+                st.markdown(
+                    f'<span class="sa-track-score">{row["score"]:.3f}</span>',
+                    unsafe_allow_html=True,
+                )
 
 # ---------------------------------------------------------------------------
 # Tab 2: Results
@@ -289,4 +323,7 @@ with tab_results:
         }
         mistakes = ui_data.escalation_mistakes(
             loaded["classification_rows"], filter_map[mistake_filter_label])
-        st.dataframe(mistakes, hide_index=True)
+        if mistakes.empty:
+            st.caption("No mistakes in this filter.")
+        else:
+            st.dataframe(ui_data.style_escalation_mistakes(mistakes), hide_index=True)

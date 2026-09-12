@@ -7,6 +7,7 @@ tests/test_run_eval.py's --estimate tests do, instead of re-deriving the
 key/prompt logic here.
 """
 import json
+import re
 
 import pandas as pd
 import pytest
@@ -250,3 +251,53 @@ def test_escalation_mistakes_all_vs_filtered():
 
     missed = ui_data.escalation_mistakes(rows, "missed_escalations")
     assert list(missed["message"]) == ["m1"]
+
+
+# ---------------------------------------------------------------------------
+# Escalation-mistakes styling (amber for missed, muted for false)
+# ---------------------------------------------------------------------------
+
+def _mistakes_df():
+    return pd.DataFrame({
+        "message": ["missed one", "false one"],
+        "gold": [True, False],
+        "predicted": [False, True],
+        "reason": ["r1", "r2"],
+        "intent": ["technical_bug", "other"],
+    })
+
+
+def test_missed_escalation_mask_is_gold_true_predicted_false():
+    df = pd.DataFrame({
+        "gold": [True, False, True],
+        "predicted": [False, True, True],
+    })
+    assert list(ui_data.missed_escalation_mask(df)) == [True, False, False]
+
+
+def test_false_escalation_mask_is_predicted_true_gold_false():
+    df = pd.DataFrame({
+        "gold": [True, False, True],
+        "predicted": [False, True, True],
+    })
+    assert list(ui_data.false_escalation_mask(df)) == [False, True, False]
+
+
+def test_style_escalation_mistakes_uses_amber_for_missed_and_muted_for_false():
+    styled = ui_data.style_escalation_mistakes(_mistakes_df())
+    html = styled.to_html()
+
+    assert ui_data.MISSED_ESCALATION_BG in html
+    assert ui_data.FALSE_ESCALATION_BG in html
+    # amber (missed, row 0) must land before muted (false, row 1) in the
+    # rendered row order, i.e. each colour is attached to its own row.
+    assert html.index(ui_data.MISSED_ESCALATION_BG) < html.index(ui_data.FALSE_ESCALATION_BG)
+
+
+def test_style_escalation_mistakes_no_third_colour_introduced():
+    """Only the brief's amber/muted tokens are used -- no unrelated accent
+    colour sneaks into the row styling."""
+    styled = ui_data.style_escalation_mistakes(_mistakes_df())
+    html = styled.to_html()
+    background_colors = set(re.findall(r"background-color:\s*(#[0-9A-Fa-f]{6,8})", html))
+    assert background_colors == {ui_data.MISSED_ESCALATION_BG, ui_data.FALSE_ESCALATION_BG}

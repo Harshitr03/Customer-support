@@ -286,3 +286,44 @@ def escalation_mistakes(classification_rows: pd.DataFrame, mistake_filter: str =
         columns={"gold_escalate": "gold", "pred_escalate": "predicted",
                  "pred_escalate_reason": "reason", "llm_pred": "intent"}
     ).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# Escalation-mistakes styling (missed vs. false escalations)
+# ---------------------------------------------------------------------------
+
+# Amber and muted at ~25% opacity (8-digit hex alpha) so the row highlight
+# sits on top of the dark table background without needing a third accent
+# colour -- the brief's palette is green/amber/muted only, and amber is
+# already "hand to a human" elsewhere in the app.
+MISSED_ESCALATION_BG = "#F5A52440"
+FALSE_ESCALATION_BG = "#9BA3AE40"
+
+
+def missed_escalation_mask(df: pd.DataFrame) -> pd.Series:
+    """True where gold says escalate but the agent predicted auto -- the
+    case the brief's amber token is reserved for. Expects `gold` and
+    `predicted` boolean columns (escalation_mistakes()'s output schema)."""
+    return df["gold"] & ~df["predicted"]
+
+
+def false_escalation_mask(df: pd.DataFrame) -> pd.Series:
+    """True where the agent predicted escalate but gold says auto."""
+    return df["predicted"] & ~df["gold"]
+
+
+def style_escalation_mistakes(df: pd.DataFrame) -> "pd.io.formats.style.Styler":
+    """Row-highlight the escalation-mistakes table: amber for missed
+    escalations, muted grey for false escalations. Returns a pandas Styler
+    -- st.dataframe(styler) renders it natively, no extra dependency."""
+    missed = missed_escalation_mask(df)
+    false_esc = false_escalation_mask(df)
+
+    def _row_style(row: pd.Series) -> list[str]:
+        if missed.loc[row.name]:
+            return [f"background-color: {MISSED_ESCALATION_BG}"] * len(row)
+        if false_esc.loc[row.name]:
+            return [f"background-color: {FALSE_ESCALATION_BG}"] * len(row)
+        return [""] * len(row)
+
+    return df.style.apply(_row_style, axis=1)
