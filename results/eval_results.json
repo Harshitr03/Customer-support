@@ -271,18 +271,18 @@
       "overall": 4.1
     },
     "nearest": {
-      "grounded": 4.216666666666667,
-      "factual": 4.416666666666667,
-      "tone": 4.05,
-      "actionable": 3.95,
-      "overall": 3.9166666666666665
+      "grounded": 4.3,
+      "factual": 4.483333333333333,
+      "tone": 4.15,
+      "actionable": 3.85,
+      "overall": 3.966666666666667
     },
     "grounded": {
       "grounded": 4.766666666666667,
       "factual": 4.85,
-      "tone": 4.7,
-      "actionable": 4.333333333333333,
-      "overall": 4.583333333333333
+      "tone": 4.683333333333334,
+      "actionable": 4.283333333333333,
+      "overall": 4.6
     }
   },
   "escalation": {
@@ -380,14 +380,14 @@
         "mean": 4.103316666666666
       },
       "nearest": {
-        "lo": 3.65,
-        "hi": 4.183333333333334,
-        "mean": 3.9112666666666662
+        "lo": 3.683333333333333,
+        "hi": 4.216666666666667,
+        "mean": 3.9648499999999993
       },
       "grounded": {
-        "lo": 4.366666666666666,
-        "hi": 4.750416666666666,
-        "mean": 4.582933333333333
+        "lo": 4.4,
+        "hi": 4.767083333333333,
+        "mean": 4.597466666666667
       }
     },
     "escalation_precision": {
@@ -424,7 +424,7 @@
       "thinking_level": "low"
     },
     "embed_model": "gemini-embedding-001",
-    "kb_size": 3800,
+    "kb_size": 5400,
     "seed": 42,
     "bootstrap_n": 1000,
     "bootstrap_seed": 42,
@@ -440,7 +440,7 @@
       "grounded_prompt_sha256": "b9329704159bfd7f6c259067421189bef46a7c10ee59ae7e4afc5a98bfd02301",
       "judge_prompt_sha256": "6922865ade554a4058f489e7ff6e04bbfefb5a6a9cc3776e81164c590ff3f0f9",
       "canned_replies_sha256": "105480d6d88f1cfecf0da4df9dd02fdd7f821aee9868416650e22c2ba3b15661",
-      "kb_meta_sha256": "dfae736f4f8860298dfeae270fb4d9c55683f5e8e7e638b2bb9c2c4f915db3d1",
+      "kb_meta_sha256": "687560ab6aec7ae2b2ecd3a37df0639f66b8bafad34eeafb8e0bffff17d4472c",
       "golden_eval_sha256": "ac3868be389841346ab113d8a1abf4481c63845b64f761cbc8c6799642c79dfc"
     }
   }
