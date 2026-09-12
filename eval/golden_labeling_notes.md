@@ -71,13 +71,14 @@
 
 - Gold intent differs from the keyword prefill (`pre_intent`) on **101 of
   200** rows.
-- Gold escalate rate: **102 of 200** rows (51%), after the 2026-09-12 rubric
-  change flipped all 37 `technical_bug` rows to escalate (65 of 200 before).
+- Gold escalate rate: **101 of 200** rows (50.5%). The 2026-09-12 rubric change
+  flipped all 37 `technical_bug` rows to escalate (65 of 200 before that), and the
+  author's review then set one bug row back to auto-handle (see the exception below).
   Escalation now applies to every `technical_bug`, `account_access`,
   `billing_subscription`, and `cancellation_refund` row plus a few `other`
   rows (open DM follow-ups); no `content_catalog` or `feature_complaint` row
   escalates.
-- Gold escalation differs from the rule prefill (`pre_escalate`) on **66 of
+- Gold escalation differs from the rule prefill (`pre_escalate`) on **65 of
   200** rows. The prefill applies the escalation rules to the *keyword* intent
   at assumed full confidence, so this gap mixes keyword-intent error with
   genuine policy error; `policy_only` in `results/eval_results.json` measures
@@ -88,14 +89,37 @@
 
   | intent | count |
   |---|---|
-  | feature_complaint | 45 |
+  | feature_complaint | 46 |
   | technical_bug | 37 |
   | billing_subscription | 31 |
-  | other | 30 |
+  | other | 28 |
   | account_access | 27 |
-  | content_catalog | 21 |
+  | content_catalog | 22 |
   | cancellation_refund | 9 |
 
 ## Author review
 
-The author reviews every row before the evaluation is run; the number of labels changed will be recorded here.
+The author reviewed all 200 rows before the reported evaluation run, working from a
+sheet that showed each drafted label and its reason with blank columns for
+disagreements (blank = agree). **11 rows were annotated and 4 gold labels changed:**
+
+| row | change | author's reason |
+|---|---|---|
+| 43 | escalate yes -> **no** | "no need to escalate rn this can be handled as generic bug reply" |
+| 60 | `other` -> **`feature_complaint`** | asking for a capability (raise the download limit) |
+| 71 | `feature_complaint` -> **`content_catalog`** | blocking an artist read as a catalog concern |
+| 78 | `other` -> **`feature_complaint`** | device-capability question read as a capability request |
+
+The other 7 annotations were questions about the drafted label, answered without
+changing it (rows 1, 3, 12, 34, 36, 37 and a confirmation on row 50).
+
+**Row 43 is a deliberate exception to the bug-escalation rubric.** "Spotify is broken
+and annoying @115888 sort ittttttt" is a `technical_bug`, which the rubric says a human
+should take, but the author judged that content-free venting gives a human nothing to
+act on. Gold therefore holds 36 escalating bug rows and this one auto-handled row, and
+the rule policy scores a false escalation against it. Per-row human judgment overrides
+the blanket rule, and the exception is recorded rather than smoothed away.
+
+The review made the headline numbers slightly worse (Gemini intent accuracy 0.790 ->
+0.785, escalation precision 0.873 -> 0.864), which is the expected direction for a real
+review rather than a rubber stamp.

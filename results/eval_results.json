@@ -1,8 +1,8 @@
 {
   "classification": {
     "trivial": {
-      "accuracy": 0.15,
-      "macro_f1": 0.037267080745341616,
+      "accuracy": 0.14,
+      "macro_f1": 0.03508771929824561,
       "per_class_f1": {
         "technical_bug": 0.0,
         "account_access": 0.0,
@@ -10,7 +10,7 @@
         "content_catalog": 0.0,
         "cancellation_refund": 0.0,
         "feature_complaint": 0.0,
-        "other": 0.2608695652173913
+        "other": 0.24561403508771928
       },
       "confusion_matrix": [
         [
@@ -47,7 +47,7 @@
           0,
           0,
           0,
-          21
+          22
         ],
         [
           0,
@@ -65,7 +65,7 @@
           0,
           0,
           0,
-          45
+          46
         ],
         [
           0,
@@ -74,7 +74,7 @@
           0,
           0,
           0,
-          30
+          28
         ]
       ],
       "confusion_matrix_labels": [
@@ -88,16 +88,16 @@
       ]
     },
     "simple_tfidf": {
-      "accuracy": 0.5,
-      "macro_f1": 0.5236014321558855,
+      "accuracy": 0.505,
+      "macro_f1": 0.5281365528558384,
       "per_class_f1": {
         "technical_bug": 0.6896551724137931,
         "account_access": 0.782608695652174,
         "billing_subscription": 0.5714285714285714,
-        "content_catalog": 0.32142857142857145,
+        "content_catalog": 0.3508771929824561,
         "cancellation_refund": 0.5882352941176471,
-        "feature_complaint": 0.2692307692307692,
-        "other": 0.4426229508196721
+        "feature_complaint": 0.2641509433962264,
+        "other": 0.45
       },
       "confusion_matrix": [
         [
@@ -131,7 +131,7 @@
           0,
           0,
           0,
-          9,
+          10,
           0,
           0,
           12
@@ -146,7 +146,7 @@
           1
         ],
         [
-          0,
+          1,
           0,
           1,
           15,
@@ -155,10 +155,10 @@
           22
         ],
         [
+          0,
+          0,
+          0,
           1,
-          0,
-          0,
-          2,
           0,
           0,
           27
@@ -175,16 +175,16 @@
       ]
     },
     "llm": {
-      "accuracy": 0.79,
-      "macro_f1": 0.7910221625156805,
+      "accuracy": 0.785,
+      "macro_f1": 0.7855568313229708,
       "per_class_f1": {
         "technical_bug": 0.7857142857142857,
         "account_access": 0.7777777777777778,
         "billing_subscription": 0.7857142857142857,
-        "content_catalog": 0.8163265306122449,
+        "content_catalog": 0.8,
         "cancellation_refund": 0.8421052631578947,
-        "feature_complaint": 0.8372093023255814,
-        "other": 0.6923076923076923
+        "feature_complaint": 0.8275862068965517,
+        "other": 0.68
       },
       "confusion_matrix": [
         [
@@ -220,7 +220,7 @@
           0,
           20,
           0,
-          0,
+          1,
           1
         ],
         [
@@ -239,7 +239,7 @@
           2,
           0,
           36,
-          1
+          2
         ],
         [
           3,
@@ -247,8 +247,8 @@
           0,
           6,
           0,
-          3,
-          18
+          2,
+          17
         ]
       ],
       "confusion_matrix_labels": [
@@ -278,40 +278,40 @@
       "overall": 3.966666666666667
     },
     "grounded": {
-      "grounded": 4.766666666666667,
-      "factual": 4.85,
-      "tone": 4.683333333333334,
-      "actionable": 4.283333333333333,
-      "overall": 4.6
+      "grounded": 4.733333333333333,
+      "factual": 4.833333333333333,
+      "tone": 4.716666666666667,
+      "actionable": 4.383333333333334,
+      "overall": 4.566666666666666
     }
   },
   "escalation": {
     "end_to_end": {
-      "precision": 0.8727272727272727,
-      "recall": 0.9411764705882353,
-      "accuracy": 0.9,
-      "tp": 96,
-      "fp": 14,
+      "precision": 0.8636363636363636,
+      "recall": 0.9405940594059405,
+      "accuracy": 0.895,
+      "tp": 95,
+      "fp": 15,
       "fn": 6,
       "tn": 84,
       "escalate_rate": 0.55
     },
     "policy_only": {
-      "precision": 0.9519230769230769,
-      "recall": 0.9705882352941176,
-      "accuracy": 0.96,
-      "tp": 99,
-      "fp": 5,
+      "precision": 0.9423076923076923,
+      "recall": 0.9702970297029703,
+      "accuracy": 0.955,
+      "tp": 98,
+      "fp": 6,
       "fn": 3,
       "tn": 93,
       "escalate_rate": 0.52
     },
     "always_escalate": {
-      "precision": 0.51,
+      "precision": 0.505,
       "recall": 1.0,
-      "accuracy": 0.51,
-      "tp": 102,
-      "fp": 98,
+      "accuracy": 0.505,
+      "tp": 101,
+      "fp": 99,
       "fn": 0,
       "tn": 0,
       "escalate_rate": 1.0
@@ -319,58 +319,58 @@
     "never_escalate": {
       "precision": 0.0,
       "recall": 0.0,
-      "accuracy": 0.49,
+      "accuracy": 0.495,
       "tp": 0,
       "fp": 0,
-      "fn": 102,
-      "tn": 98,
+      "fn": 101,
+      "tn": 99,
       "escalate_rate": 0.0
     },
     "simple_tfidf": {
-      "precision": 0.9411764705882353,
-      "recall": 0.6274509803921569,
-      "accuracy": 0.79,
-      "tp": 64,
-      "fp": 4,
+      "precision": 0.9264705882352942,
+      "recall": 0.6237623762376238,
+      "accuracy": 0.785,
+      "tp": 63,
+      "fp": 5,
       "fn": 38,
       "tn": 94,
       "escalate_rate": 0.34
     },
-    "gold_escalate_rate": 0.51
+    "gold_escalate_rate": 0.505
   },
   "bootstrap_ci": {
     "classification_accuracy": {
       "trivial": {
-        "lo": 0.105,
-        "hi": 0.205,
-        "mean": 0.149575
+        "lo": 0.095,
+        "hi": 0.19,
+        "mean": 0.139655
       },
       "simple_tfidf": {
-        "lo": 0.42,
-        "hi": 0.57,
-        "mean": 0.49881
+        "lo": 0.43,
+        "hi": 0.575,
+        "mean": 0.503895
       },
       "llm": {
-        "lo": 0.735,
-        "hi": 0.845,
-        "mean": 0.789815
+        "lo": 0.725,
+        "hi": 0.84,
+        "mean": 0.78461
       }
     },
     "classification_macro_f1": {
       "trivial": {
-        "lo": 0.027149321266968323,
-        "hi": 0.04860699466508595,
-        "mean": 0.037048904763927144
+        "lo": 0.024787997390737115,
+        "hi": 0.04561824729891956,
+        "mean": 0.034891066090703256
       },
       "simple_tfidf": {
-        "lo": 0.4391108093985894,
-        "hi": 0.5923990697492667,
-        "mean": 0.5173937684827278
+        "lo": 0.4414148274655063,
+        "hi": 0.5961295986913715,
+        "mean": 0.5219964986635509
       },
       "llm": {
-        "lo": 0.7262260013737769,
-        "hi": 0.8482376592594776,
-        "mean": 0.7878472037385368
+        "lo": 0.7229008222260402,
+        "hi": 0.8413755151002006,
+        "mean": 0.7821212562781588
       }
     },
     "reply_overall": {
@@ -385,33 +385,33 @@
         "mean": 3.9648499999999993
       },
       "grounded": {
-        "lo": 4.4,
-        "hi": 4.767083333333333,
-        "mean": 4.597466666666667
+        "lo": 4.383333333333334,
+        "hi": 4.717083333333333,
+        "mean": 4.566183333333333
       }
     },
     "escalation_precision": {
       "end_to_end": {
-        "lo": 0.8064359536486063,
-        "hi": 0.9310344827586207,
-        "mean": 0.8711578765760644
+        "lo": 0.7924434896319821,
+        "hi": 0.9238095238095239,
+        "mean": 0.8618057664672872
       },
       "policy_only": {
-        "lo": 0.9071923324742268,
-        "hi": 0.989798495155638,
-        "mean": 0.9506813297406511
+        "lo": 0.8918918918918919,
+        "hi": 0.980596263051841,
+        "mean": 0.9407732525337199
       }
     },
     "escalation_recall": {
       "end_to_end": {
-        "lo": 0.8921568627450981,
-        "hi": 0.9809568733153639,
-        "mean": 0.9408431997743203
+        "lo": 0.891298966853207,
+        "hi": 0.9807692307692307,
+        "mean": 0.9402499692805452
       },
       "policy_only": {
-        "lo": 0.9306757425742574,
+        "lo": 0.9302267441860465,
         "hi": 1.0,
-        "mean": 0.9702561187698979
+        "mean": 0.9699581035729359
       }
     }
   },
@@ -437,11 +437,11 @@
     "escalation_baselines_note": "policy_only and simple_tfidf both call decide() with confidence pinned to 1.0, which disables decide()'s low-confidence escalation rule entirely (1.0 is never below CONF_THRESHOLD). So end_to_end minus policy_only isn't purely 'what the low-confidence rule adds' -- it mixes that rule's effect with ordinary classifier error (end_to_end uses the LLM's own predicted intent and confidence, which can differ from gold_intent even before the confidence rule ever fires).",
     "fingerprint": {
       "classify_prompt_sha256": "bd0ce68a2cf86466f057073d607dc37e5bb2c9b1d774a54f39ee70b041a6749f",
-      "grounded_prompt_sha256": "b9329704159bfd7f6c259067421189bef46a7c10ee59ae7e4afc5a98bfd02301",
+      "grounded_prompt_sha256": "5c3ae85d026042e6a15861b3a834d6396603e2cb8495ddb125af315a60036e0a",
       "judge_prompt_sha256": "6922865ade554a4058f489e7ff6e04bbfefb5a6a9cc3776e81164c590ff3f0f9",
       "canned_replies_sha256": "105480d6d88f1cfecf0da4df9dd02fdd7f821aee9868416650e22c2ba3b15661",
       "kb_meta_sha256": "687560ab6aec7ae2b2ecd3a37df0639f66b8bafad34eeafb8e0bffff17d4472c",
-      "golden_eval_sha256": "ac3868be389841346ab113d8a1abf4481c63845b64f761cbc8c6799642c79dfc"
+      "golden_eval_sha256": "438188739fd110a50dbce8fe8d68b17abece1bffad1b74d7723e0a2784e55487"
     }
   }
 }
