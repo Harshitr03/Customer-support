@@ -111,6 +111,10 @@ def test_grounded_prompt_does_not_ask_for_a_signature():
     assert "^S" not in dr._GEN_PROMPT
 
 
+def test_grounded_prompt_instructs_same_language_as_customer():
+    assert "same language" in dr._GEN_PROMPT.lower()
+
+
 def test_clean_reply_strips_signoff():
     text = "Thanks for reaching out, we'll take a look /LS"
     assert dr.clean_reply(text) == "Thanks for reaching out, we'll take a look"

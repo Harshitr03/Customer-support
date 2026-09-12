@@ -62,7 +62,8 @@ def nearest_reply(message: str) -> str:
 _GEN_PROMPT = """You are a Spotify customer-support agent on Twitter. Write ONE short,
 empathetic reply (<280 chars) to the customer message below. Ground your reply in how
 Spotify has historically handled similar issues (examples provided). Do not invent
-account-specific facts. Do not include URLs or @handles in your reply.
+account-specific facts. Do not include URLs or @handles in your reply. Write your
+reply in the same language as the customer message, keeping Spotify's warm, helpful tone.
 
 Predicted intent: {intent}
 
