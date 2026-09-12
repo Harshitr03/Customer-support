@@ -34,11 +34,23 @@
     > **What "escalate" means in the golden set.** A human should take the
     > message when it needs account-specific action (login, payment or plan
     > change, a refund, cancelling an account the customer can't reach), when
-    > it's a security or fraud issue, or when it follows up an open DM case.
-    > General troubleshooting, catalog questions, feature feedback, how-tos,
-    > and praise are auto-handleable. This rubric differs from the rule
-    > policy on 29 of 200 rows. That gap is deliberate: it measures policy
-    > error.
+    > it's a security or fraud issue, when it follows up an open DM case, or
+    > when it reports a technical bug. Catalog questions, feature feedback,
+    > how-tos, and praise are auto-handleable.
+
+    **Rubric change, 2026-09-12 — disclosed because it happened after the
+    first results were in.** The rubric originally called bug reports
+    auto-handleable, on the evidence that Spotify's own first reply to a
+    plain bug report asked for a DM or the account email only 28% of the
+    time (versus 64% once the customer said the standard fixes had failed).
+    After seeing the first run, the author decided that a support agent can
+    rarely resolve a bug from the first reply and that bug reports should go
+    to a human by default. That changed `ESCALATE_INTENTS` in
+    `src/support_agent/escalate.py` **and** this rubric, so all 37
+    `technical_bug` rows flipped to `gold_escalate = True`; their
+    `gold_reason` records the change. Scoring a policy against a rubric
+    revised to match it inflates the escalation numbers, so the report's
+    "what's misleading" section states this plainly.
 
     This rubric is **not** "read `src/support_agent/escalate.py`'s rules and
     apply them" -- doing that would grade the rule-based policy against its
@@ -59,10 +71,19 @@
 
 - Gold intent differs from the keyword prefill (`pre_intent`) on **101 of
   200** rows.
-- Gold escalation differs from the rule prefill (`pre_escalate`) on **29 of
-  200** rows -- the same 29-row gap `report/DECISION_LOG.md` item 7 measures
-  as policy error.
-- Gold escalate rate: **65 of 200** rows (32.5%).
+- Gold escalate rate: **102 of 200** rows (51%), after the 2026-09-12 rubric
+  change flipped all 37 `technical_bug` rows to escalate (65 of 200 before).
+  Escalation now applies to every `technical_bug`, `account_access`,
+  `billing_subscription`, and `cancellation_refund` row plus a few `other`
+  rows (open DM follow-ups); no `content_catalog` or `feature_complaint` row
+  escalates.
+- Gold escalation differs from the rule prefill (`pre_escalate`) on **66 of
+  200** rows. The prefill applies the escalation rules to the *keyword* intent
+  at assumed full confidence, so this gap mixes keyword-intent error with
+  genuine policy error; `policy_only` in `results/eval_results.json` measures
+  policy error against the gold intent instead.
+- The per-system escalation scores are recomputed on every evaluation run;
+  `results/eval_results.json` is the current source.
 - Gold intent counts:
 
   | intent | count |
