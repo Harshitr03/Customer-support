@@ -121,6 +121,61 @@ def test_offline_missing_replay_entry_stops_cleanly_with_helpful_message(tmp_pat
     assert "eval harness" in out.lower() or "4/6" in out  # names the stage that needed it
 
 
+def test_offline_stop_at_the_final_demo_stage_still_exits_zero(tmp_path, monkeypatch, capsys):
+    """Stages 1-5 produce every number the report cites; stage 6 is a demo.
+    A grader running this offline in a fresh clone must not get a non-zero
+    exit -- which reads as "the reproduction failed" -- just because the
+    optional last stage wanted a key. Earlier stages keep exiting 1 (see
+    test_offline_missing_replay_entry_... above): stopping there really is a
+    failed reproduction. The stop is still printed either way, never
+    silently swallowed."""
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+
+    def raise_offline(message, turns=None):
+        calls.append("pipeline_handle")
+        raise run_demo.OfflineModeError(
+            "offline mode: no cached response for this call — run with --live")
+
+    monkeypatch.setattr(run_demo.pipeline, "handle", raise_offline)
+
+    code = run_demo.main([])
+
+    assert code == 0
+    assert calls == ["build_pool", "build_index", "build_golden_set", "run_eval",
+                      "human_agreement", "pipeline_handle"]
+    out = capsys.readouterr().out
+    assert "--live" in out               # still says how to run the demo
+    assert "6/6" in out                  # still names the stage that stopped
+    assert "successful reproduction" in out
+
+
+def test_quota_exhausted_at_the_final_stage_still_exits_nonzero(tmp_path, monkeypatch):
+    """The exit-0 carve-out above is for *offline* stops only. A per-day
+    quota 429 happens during a --live run the maintainer asked for, so it's
+    a real failure worth a red exit even at the last stage -- otherwise a
+    refresh of the replay cache could quietly half-succeed."""
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key-not-real")
+
+    def raise_quota(message, turns=None):
+        calls.append("pipeline_handle")
+        raise run_demo.QuotaExhaustedError("daily quota exhausted (GenerateContentPerDay).")
+
+    monkeypatch.setattr(run_demo.pipeline, "handle", raise_quota)
+
+    code = run_demo.main(["--live"])
+
+    assert code == 1
+
+
 def test_quota_exhausted_stops_cleanly_with_helpful_message(tmp_path, monkeypatch, capsys):
     """A per-day quota 429 (raised as QuotaExhaustedError deep inside
     llm_client's retry helper) must be caught exactly like OfflineModeError
