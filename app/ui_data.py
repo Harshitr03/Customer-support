@@ -98,6 +98,35 @@ def format_evidence(evidence: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Message-source precedence (Tab 1: picked example vs. typed free text)
+# ---------------------------------------------------------------------------
+
+def resolve_message(picked: str | None, typed: str | None, last_changed: str) -> str:
+    """Decide which of the picked cached example or the typed free-text
+    box should be run, given the current value of both widgets.
+
+    The app's normal flow makes this a non-issue: selecting a non-default
+    example clears the free-text box (via the selectbox's `on_change`
+    callback), so in practice only one of `picked`/`typed` is ever
+    non-empty at a time and that one simply wins. `last_changed` --
+    "picked" or "typed", the name of whichever widget the user most
+    recently interacted with -- exists as the tie-breaker for the case
+    both are non-empty anyway (e.g. the user types again after picking an
+    example, without changing the selection back to "(type your own)"):
+    the most recent interaction wins, so it's never possible for a stale
+    value in the *other* widget to silently override what the user just
+    did. Returns "" when neither is set, so the caller can show a
+    friendly "pick or type a message" prompt instead of quietly running
+    nothing.
+    """
+    picked = (picked or "").strip()
+    typed = (typed or "").strip()
+    if picked and typed:
+        return typed if last_changed == "typed" else picked
+    return typed or picked
+
+
+# ---------------------------------------------------------------------------
 # Cached-example discovery (Tab 1's example picker)
 # ---------------------------------------------------------------------------
 

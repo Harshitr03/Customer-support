@@ -180,18 +180,39 @@ with tab_try:
     example_labels = ["(type your own)"] + [
         f"#{ex['root_id']} — {ui_data.truncate(ex['message'], 70)}" for ex in cached_examples
     ]
-    chosen_label = st.selectbox("Choose a cached example", options=example_labels, key="example_picker")
+
+    def _on_example_picked():
+        # Most-recent-interaction wins (see ui_data.resolve_message): record
+        # that the picker was touched last, and -- for a real pick, not a
+        # reset back to "(type your own)" -- clear the free-text box so the
+        # winner is also visibly the only thing left with text in it,
+        # instead of a silent precedence rule the user has to guess at.
+        st.session_state["sa_last_changed"] = "picked"
+        if st.session_state.get("example_picker", "(type your own)") != "(type your own)":
+            st.session_state["custom_message_input"] = ""
+
+    def _on_custom_message_typed():
+        st.session_state["sa_last_changed"] = "typed"
+
+    chosen_label = st.selectbox(
+        "Choose a cached example", options=example_labels, key="example_picker",
+        on_change=_on_example_picked,
+    )
 
     custom_message = st.text_area(
         "Or type your own message", key="custom_message_input", height=100,
         placeholder="e.g. the app keeps crashing when I hit play",
+        on_change=_on_custom_message_typed,
     )
 
-    if chosen_label != "(type your own)" and not custom_message.strip():
+    if chosen_label != "(type your own)":
         idx = example_labels.index(chosen_label) - 1
-        message_to_run = cached_examples[idx]["message"]
+        picked_message = cached_examples[idx]["message"]
     else:
-        message_to_run = custom_message.strip()
+        picked_message = ""
+
+    message_to_run = ui_data.resolve_message(
+        picked_message, custom_message, st.session_state.get("sa_last_changed", ""))
 
     run_clicked = st.button("Run the agent", key="run_agent_button", type="primary")
 
@@ -326,4 +347,18 @@ with tab_results:
         if mistakes.empty:
             st.caption("No mistakes in this filter.")
         else:
-            st.dataframe(ui_data.style_escalation_mistakes(mistakes), hide_index=True)
+            st.dataframe(
+                ui_data.style_escalation_mistakes(mistakes),
+                hide_index=True,
+                column_config={
+                    # "reason" is a full sentence (the escalation rule that
+                    # fired) and was clipping mid-sentence at narrow widths
+                    # under the default auto-sizing; give it most of the
+                    # row's width and let the short columns stay compact.
+                    "message": st.column_config.TextColumn("message", width="medium"),
+                    "gold": st.column_config.CheckboxColumn("gold", width="small"),
+                    "predicted": st.column_config.CheckboxColumn("predicted", width="small"),
+                    "reason": st.column_config.TextColumn("reason", width="large"),
+                    "intent": st.column_config.TextColumn("intent", width="small"),
+                },
+            )

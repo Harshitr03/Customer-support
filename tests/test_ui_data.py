@@ -128,6 +128,38 @@ def test_truncate_long_text_is_cut_with_ellipsis():
 
 
 # ---------------------------------------------------------------------------
+# resolve_message -- precedence between the picked example and typed text
+# ---------------------------------------------------------------------------
+
+def test_resolve_message_picked_only():
+    assert ui_data.resolve_message("picked example text", "", "picked") == "picked example text"
+    # last_changed shouldn't matter when only one side has text.
+    assert ui_data.resolve_message("picked example text", "", "typed") == "picked example text"
+    assert ui_data.resolve_message("picked example text", "", "") == "picked example text"
+
+
+def test_resolve_message_typed_only():
+    assert ui_data.resolve_message("", "typed text", "typed") == "typed text"
+    assert ui_data.resolve_message("", "typed text", "picked") == "typed text"
+    assert ui_data.resolve_message(None, "typed text", "") == "typed text"
+
+
+def test_resolve_message_both_set_last_changed_wins():
+    # Most-recent-interaction wins: if the user picked an example and then
+    # kept typing without re-picking, the freshly typed text wins even
+    # though the picker still holds the old selection.
+    assert ui_data.resolve_message("picked example", "typed text", "typed") == "typed text"
+    # And if they picked *after* typing, the pick wins.
+    assert ui_data.resolve_message("picked example", "typed text", "picked") == "picked example"
+
+
+def test_resolve_message_neither_set_returns_empty():
+    assert ui_data.resolve_message("", "", "") == ""
+    assert ui_data.resolve_message(None, None, "picked") == ""
+    assert ui_data.resolve_message("   ", "  ", "typed") == ""
+
+
+# ---------------------------------------------------------------------------
 # Results loader
 # ---------------------------------------------------------------------------
 
