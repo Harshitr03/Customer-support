@@ -6,11 +6,20 @@ _embed_cache_key/_cache_path) to write fake cache files, exactly like
 tests/test_run_eval.py's --estimate tests do, instead of re-deriving the
 key/prompt logic here.
 """
+import importlib.util
 import json
 import re
 
 import pandas as pd
 import pytest
+
+# pandas' .style accessor needs jinja2, which arrives only as a transitive
+# dependency of the optional [ui] extra (streamlit). A grader running plain
+# `pytest` after `pip install -e ".[dev]"` must not see these fail.
+_needs_jinja2 = pytest.mark.skipif(
+    importlib.util.find_spec("jinja2") is None,
+    reason="pandas .style needs jinja2; install the optional [ui] extra",
+)
 
 from app import ui_data
 from eval import run_eval
@@ -315,6 +324,7 @@ def test_false_escalation_mask_is_predicted_true_gold_false():
     assert list(ui_data.false_escalation_mask(df)) == [False, True, False]
 
 
+@_needs_jinja2
 def test_style_escalation_mistakes_uses_amber_for_missed_and_muted_for_false():
     styled = ui_data.style_escalation_mistakes(_mistakes_df())
     html = styled.to_html()
@@ -326,6 +336,7 @@ def test_style_escalation_mistakes_uses_amber_for_missed_and_muted_for_false():
     assert html.index(ui_data.MISSED_ESCALATION_BG) < html.index(ui_data.FALSE_ESCALATION_BG)
 
 
+@_needs_jinja2
 def test_style_escalation_mistakes_no_third_colour_introduced():
     """Only the brief's amber/muted tokens are used -- no unrelated accent
     colour sneaks into the row styling."""
