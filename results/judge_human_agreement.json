@@ -1,0 +1,80 @@
+{
+  "overall": {
+    "n": 40,
+    "cohen_kappa_binned": 0.34156378600823045,
+    "weighted_kappa_quadratic": 0.29268292682926833,
+    "spearman": 0.2452163323906994,
+    "exact_agreement": 0.525,
+    "within_one": 0.8,
+    "mean_human": 4.6,
+    "mean_judge": 4.25,
+    "mean_diff": -0.35
+  },
+  "per_system": {
+    "grounded": {
+      "n": 13,
+      "cohen_kappa_binned": 0.7547169811320754,
+      "weighted_kappa_quadratic": 0.5517241379310345,
+      "spearman": 0.6125196937081903,
+      "exact_agreement": 0.6153846153846154,
+      "within_one": 0.9230769230769231,
+      "mean_human": 4.6923076923076925,
+      "mean_judge": 4.230769230769231,
+      "mean_diff": -0.46153846153846156
+    },
+    "nearest": {
+      "n": 13,
+      "cohen_kappa_binned": 0.3035714285714285,
+      "weighted_kappa_quadratic": 0.39735099337748336,
+      "spearman": 0.19628237145398725,
+      "exact_agreement": 0.46153846153846156,
+      "within_one": 0.7692307692307693,
+      "mean_human": 4.538461538461538,
+      "mean_judge": 4.153846153846154,
+      "mean_diff": -0.38461538461538464
+    },
+    "trivial": {
+      "n": 14,
+      "cohen_kappa_binned": -0.1200000000000001,
+      "weighted_kappa_quadratic": 0.009756097560975618,
+      "spearman": 0.024291497975708506,
+      "exact_agreement": 0.5,
+      "within_one": 0.7142857142857143,
+      "mean_human": 4.571428571428571,
+      "mean_judge": 4.357142857142857,
+      "mean_diff": -0.21428571428571427
+    }
+  },
+  "confusion": {
+    "labels": [
+      "low",
+      "mid",
+      "high"
+    ],
+    "table": [
+      [
+        1,
+        0,
+        1
+      ],
+      [
+        0,
+        2,
+        2
+      ],
+      [
+        2,
+        3,
+        29
+      ]
+    ]
+  },
+  "bootstrap_ci_kappa_binned": {
+    "lo": -0.0738255033557047,
+    "hi": 0.6916145785758093,
+    "mean": 0.3304833534330372,
+    "n_boot": 1000,
+    "n_skipped": 0
+  },
+  "note": "Agreement pooled across all three systems (\"overall\" above) is inflated relative to any one system's agreement: the three systems differ in quality, so the pooled correlation partly reflects the judge and the human both noticing that a grounded-generation reply beats a canned one, not that they agree on any single reply's score. Per-system agreement (~13 pairs each, in \"per_system\" below) is the stricter test -- it holds quality roughly constant within each group."
+}
