@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from eval import run_eval
+from support_agent import config
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +243,44 @@ def test_build_blind_human_scoring_blind_df_has_no_system_or_judge_score():
     assert "system" not in blind_df.columns
     assert "judge_overall" not in blind_df.columns
     assert (blind_df["human_overall"] == "").all()
+
+
+def test_committed_blind_sheet_is_actually_blank_not_a_filled_copy():
+    """Repo-state guard, not a unit test of the builder above.
+
+    results/human_scoring_blind.csv is a *generated* artifact (run_eval
+    rewrites it every run) and the README calls its human_overall column
+    "(blank) ... the file to send out". A filled copy was nonetheless
+    committed once (ae46167), which had two bad effects: the repo shipped a
+    rater template misrepresenting itself as completed work, and every
+    `python scripts/run_demo.py` reverted it -- handing a grader a 40-line
+    dirty diff on a clean clone and making the reproduction look like it had
+    damaged something. The real scores live in data/golden/human_scores.csv,
+    which is what eval/human_agreement.py reads; the committed sheet was a
+    byte-identical duplicate of it, so blanking it lost nothing.
+
+    Skipped rather than failed when the file is absent: results/ is a build
+    output, and a contributor who has not run the harness yet shouldn't see
+    a red suite for it."""
+    path = config.RESULTS_DIR / "human_scoring_blind.csv"
+    if not path.exists():
+        pytest.skip("results/ not built yet -- run scripts/run_demo.py")
+
+    df = pd.read_csv(path, keep_default_na=False, dtype=str)
+    assert list(df.columns) == ["item_id", "message", "reply", "reference", "human_overall"]
+    filled = df.loc[df["human_overall"].str.strip() != ""]
+    assert filled.empty, (
+        "results/human_scoring_blind.csv has scores in human_overall on "
+        f"{len(filled)} row(s), but it is the blind sheet sent to a rater and the "
+        "README documents that column as blank. Filled scores belong in "
+        "data/golden/human_scores.csv (the file eval/human_agreement.py reads). "
+        "Do not commit a filled blind sheet: it overwrites a generated artifact "
+        "and every eval run reverts it."
+    )
+    # The sheet must still be the real 40-pair set, not an empty file that
+    # trivially satisfies the assertion above.
+    assert len(df) == 40
+    assert "system" not in df.columns and "judge_overall" not in df.columns
 
 
 def test_build_blind_human_scoring_item_ids_are_h01_style_assigned_after_shuffle():
