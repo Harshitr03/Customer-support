@@ -81,7 +81,7 @@ customer tweet
   - **Reference:** Spotify's *actual* reply in that same held-out thread, which no system could have seen.
   - **Blind:** the judge never learns which system wrote a reply.
 
-**Does the judge agree with a human?** The author scores reply pairs blind: no judge scores, no system names, rows shuffled. I report binned and quadratic-weighted Cohen's kappa, Spearman correlation, and exact and within-one agreement. The numbers in §4 are from the first completed round (40 pairs, one system per spot-check message, rotated); the sheet has since been widened to all 3 systems per message (120 pairs total, 40 scored so far) for a tighter per-system read, in progress at time of writing.
+**Does the judge agree with a human?** The author scores reply pairs blind: no judge scores, no system names, rows shuffled. I report binned and quadratic-weighted Cohen's kappa, Spearman correlation, and exact and within-one agreement. 120 pairs total -- all 3 systems for each of the 40 spot-check messages, not a rotation, so every system gets a full ~40-pair comparison instead of ~13.
 
 ## 4. Results
 
@@ -123,18 +123,20 @@ The end-to-end/policy-only gap isolates blame: with perfect intents the policy s
 
 | Metric | Value |
 |---|---|
-| Cohen's kappa (binned) | 0.342 [−0.074, 0.692] |
-| Quadratic weighted kappa | 0.293 |
-| Spearman | 0.245 |
-| Exact agreement | 0.525 |
-| Within one point | 0.800 |
-| Judge − human mean | −0.35 |
+| Cohen's kappa (binned) | 0.155 [−0.001, 0.305] |
+| Quadratic weighted kappa | 0.349 |
+| Spearman | 0.382 |
+| Exact agreement | 0.425 |
+| Within one point | 0.767 |
+| Judge − human mean | +0.017 |
 
-Per system: grounded **0.755**, nearest 0.304, trivial **−0.120**.
+Per system (n=40 each): grounded **0.388**, nearest **−0.017**, trivial 0.181.
+
+n=120 (all 3 systems x 40 spot-check messages). An earlier n=40 round (one system per message, rotated) reported kappa 0.342 [−0.074, 0.692] -- a wider, more optimistic estimate built on only ~13 pairs per system. The full 120 is the honest number: the CI tightened by more than half, but the point estimate *dropped*, which is what a genuine small-sample overestimate looks like when corrected, not a regression. The `nearest` baseline is the real finding here -- agreement collapsed to essentially zero (−0.017), meaning the judge cannot reliably tell a copy-pasted reply written for a different customer from a good one; `grounded`'s agreement is weaker than first measured (0.755 → 0.388) but still the clearest signal of the three.
 
 ## 5. Failure analysis
 
-**1. The judge is worse than chance on canned templates.** Kappa −0.120 on the trivial system. It rewards fluent, polite, well-formed replies; the author scored the same replies on whether they actually answered the customer. Example (item h09): a locked-out Indonesian customer is told, in English, to cancel under Account > Subscription — judge 4, human 1. *Hypothesis:* the rubric's four axes (grounded, factual, tone, actionable) are all satisfiable by a generic template, because "actionable" doesn't require the action to be *possible for this customer*.
+**1. The judge cannot tell a reply written for someone else from a good one.** Kappa −0.017 on the `nearest` system (n=40) -- essentially chance-level agreement, the collapse only visible once the human-scoring sheet was widened past its original 40-pair, ~13-per-system sample. `nearest` copies a real historical Spotify reply verbatim; when that reply was written for a *different* customer, it reads fluent and on-brand while being wrong for the person in front of it. Example (item h093): a customer named Diana reports unauthorized charges; the copied reply opens "Hey Dylan, that's not cool!" -- a name from someone else's conversation. Judge: 4. Human: 1. Four more `nearest` items in the same session show the identical pattern: fluent, on-topic-*sounding* replies the judge rates 4-5 that a human catches immediately because they don't actually engage with what this customer said. *Hypothesis:* the rubric's four axes (grounded, factual, tone, actionable) are all satisfiable by borrowed fluency, because none of them explicitly asks "was this written for the person who actually sent this message."
 
 **2. Non-English messages were answered in English.** Three golden rows are non-English. Row 186's opening words are "Mereka pake bhs. Inggris" — "they use English" — a complaint about exactly that. The fix (one prompt instruction) produced an Indonesian reply, but aggregate judge score *fell* 4.60 → 4.57 at the time, because the rubric has no language axis. (The headline grounded score reported in §4, 4.58, reflects a later, unrelated taxonomy fix that changed which intent a handful of messages draft their reply against — not a reversal of this finding.) *Hypothesis:* the judge can't measure a dimension it wasn't told about, so a real improvement is invisible to the headline metric.
 
@@ -149,7 +151,7 @@ Per system: grounded **0.755**, nearest 0.304, trivial **−0.120**.
 The headline is "86% intent accuracy, 4.58 reply quality, 0.86/0.93 escalation." Each is qualified:
 
 - **The escalation numbers are the least trustworthy figure in the report.** The rubric was revised *after* the first results: bug reports were originally auto-handleable (on the brand's own evidence — Spotify asked for a DM on 28% of plain bug reports), then reclassified as escalate-by-default, changing both the rules and the gold labels. Precision went 0.79 → 0.86 as a result. **Under the original rubric the same policy scores 0.55.** Scoring a policy against a rubric revised to match it is not independent evidence.
-- **Reply quality rests on a judge that agrees with a human at kappa 0.342, whose CI crosses zero.** With n=40 I cannot exclude chance-level agreement. The judge is trustworthy on the grounded system (0.755) and anti-correlated on canned templates (−0.120) — precisely where the baseline comparison needs it most.
+- **Reply quality rests on a judge that agrees with a human at kappa 0.155, on a CI [−0.001, 0.305] that still just touches zero.** n=120 (all 3 systems, not a rotation) tightened the interval by more than half versus an earlier n=40 round, but the honest point estimate is "slight" agreement, not the "fair" it first appeared to be — I still cannot fully exclude chance-level agreement on the binned measure, though the weighted kappa (0.349) and Spearman (0.382) tell a somewhat more favorable story when near-misses get partial credit. Per system, the judge is a real (if weaker-than-first-measured) signal on `grounded` (0.388) and essentially useless on `nearest` (−0.017) — precisely where a reply reads fluent while having been written for a different customer, which is exactly the case the baseline comparison most needs the judge to catch.
 - **One AI labeler, one human reviewer, across two review rounds.** Gold labels were drafted by Claude and reviewed by the author, who changed 4 of 200 in round 1 (moving accuracy *down*, 0.790 → 0.785, which suggests it was real) and 2 more of 200 in round 2, found later while reading the classifier's own errors — both round-2 corrections matched what the classifier had already predicted, so that round moved accuracy *up* (0.850 → 0.860). Neither direction is independent hand-labeling or an inter-annotator agreement study, and a review conducted by reading the model's mistakes carries a specific risk the round-1 review didn't: relabeling toward the model's answer because it's in view, not because it's right. Both round-2 changes were checked against evidence outside the model's own prediction (see §5) before being accepted, but a single reviewer — self-reviewing spot-checked by their own later error analysis — cannot fully bound that bias.
 - **The judge and the reply generator share a model family**, so "the model's idea of a good reply" is graded by "the model's judgment of a good reply."
 - **n = 200, and rare intents are rarer still.** `cancellation_refund` has 9 rows. Per-intent F1 for the small classes is nearly meaningless, and macro-F1 inherits that noise.

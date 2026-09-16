@@ -185,12 +185,15 @@ differences, not just rater/judge agreement).
   `n_reply_subset` in `results/eval_results.json`'s metadata) — treat
   point estimates cautiously; the bootstrap CIs in that file are the more
   honest read.
-- **Judge/human agreement is partial, not absent, and not favorable until
-  it's complete.** The blind-scoring sheet was recently widened from 40
-  pairs (one system per spot-check message, rotated) to 120 (all three
-  systems per message, for a full per-system comparison instead of ~13
-  pairs each). 40 of 120 are already scored — carried over from the
-  original round — 80 are pending. `results/judge_human_agreement.json`
-  and the numbers in `report/REPORT.md` still reflect the completed
-  40-pair round; `run_demo.py` reports the gap explicitly rather than
-  computing on a partial sheet.
+- **Judge/human agreement, on the full 120-pair sheet, is weaker than an
+  earlier small sample suggested — disclosed, not smoothed over.** The
+  blind-scoring sheet was widened from 40 pairs (one system per
+  spot-check message, rotated, ~13 per system) to 120 (all three systems
+  per message, ~40 per system) and fully scored. Binned kappa moved
+  0.342 [−0.074, 0.692] → **0.155 [−0.001, 0.305]**: the CI more than
+  halved, but the point estimate dropped — the signature of a real
+  small-sample overestimate being corrected, not a regression. Per
+  system: `grounded` 0.755 → 0.388 (still the clearest signal), `nearest`
+  0.304 → **−0.017** (essentially chance — the judge cannot tell a reply
+  copied for a different customer from a good one). Full numbers and the
+  concrete example: `report/REPORT.md` §4–5.

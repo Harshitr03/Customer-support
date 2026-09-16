@@ -1,48 +1,48 @@
 {
   "overall": {
-    "n": 40,
-    "cohen_kappa_binned": 0.34156378600823045,
-    "weighted_kappa_quadratic": 0.29268292682926833,
-    "spearman": 0.2452163323906994,
-    "exact_agreement": 0.525,
-    "within_one": 0.8,
-    "mean_human": 4.6,
-    "mean_judge": 4.25,
-    "mean_diff": -0.35
+    "n": 120,
+    "cohen_kappa_binned": 0.15463917525773196,
+    "weighted_kappa_quadratic": 0.34925503943908864,
+    "spearman": 0.38247568081185807,
+    "exact_agreement": 0.425,
+    "within_one": 0.7666666666666667,
+    "mean_human": 4.116666666666666,
+    "mean_judge": 4.133333333333334,
+    "mean_diff": 0.016666666666666666
   },
   "per_system": {
     "grounded": {
-      "n": 13,
-      "cohen_kappa_binned": 0.7547169811320754,
-      "weighted_kappa_quadratic": 0.5517241379310345,
-      "spearman": 0.6125196937081903,
-      "exact_agreement": 0.6153846153846154,
-      "within_one": 0.9230769230769231,
-      "mean_human": 4.6923076923076925,
-      "mean_judge": 4.230769230769231,
-      "mean_diff": -0.46153846153846156
+      "n": 40,
+      "cohen_kappa_binned": 0.3883792048929664,
+      "weighted_kappa_quadratic": 0.33045356371490275,
+      "spearman": 0.2997652481966944,
+      "exact_agreement": 0.575,
+      "within_one": 0.925,
+      "mean_human": 4.65,
+      "mean_judge": 4.475,
+      "mean_diff": -0.175
     },
     "nearest": {
-      "n": 13,
-      "cohen_kappa_binned": 0.3035714285714285,
-      "weighted_kappa_quadratic": 0.39735099337748336,
-      "spearman": 0.19628237145398725,
-      "exact_agreement": 0.46153846153846156,
-      "within_one": 0.7692307692307693,
-      "mean_human": 4.538461538461538,
-      "mean_judge": 4.153846153846154,
-      "mean_diff": -0.38461538461538464
+      "n": 40,
+      "cohen_kappa_binned": -0.01734104046242768,
+      "weighted_kappa_quadratic": 0.2191977077363897,
+      "spearman": 0.2543754248286285,
+      "exact_agreement": 0.225,
+      "within_one": 0.6,
+      "mean_human": 3.575,
+      "mean_judge": 3.9,
+      "mean_diff": 0.325
     },
     "trivial": {
-      "n": 14,
-      "cohen_kappa_binned": -0.1200000000000001,
-      "weighted_kappa_quadratic": 0.009756097560975618,
-      "spearman": 0.024291497975708506,
-      "exact_agreement": 0.5,
-      "within_one": 0.7142857142857143,
-      "mean_human": 4.571428571428571,
-      "mean_judge": 4.357142857142857,
-      "mean_diff": -0.21428571428571427
+      "n": 40,
+      "cohen_kappa_binned": 0.18128654970760238,
+      "weighted_kappa_quadratic": 0.3813333333333333,
+      "spearman": 0.4183136113579588,
+      "exact_agreement": 0.475,
+      "within_one": 0.775,
+      "mean_human": 4.125,
+      "mean_judge": 4.025,
+      "mean_diff": -0.1
     }
   },
   "confusion": {
@@ -53,26 +53,26 @@
     ],
     "table": [
       [
-        1,
-        0,
-        1
-      ],
-      [
-        0,
+        4,
         2,
-        2
+        10
       ],
       [
         2,
         3,
-        29
+        14
+      ],
+      [
+        6,
+        7,
+        72
       ]
     ]
   },
   "bootstrap_ci_kappa_binned": {
-    "lo": -0.0738255033557047,
-    "hi": 0.6916145785758093,
-    "mean": 0.3304833534330372,
+    "lo": -0.0013263212072822934,
+    "hi": 0.30527381617012633,
+    "mean": 0.15074286592070474,
     "n_boot": 1000,
     "n_skipped": 0
   },
