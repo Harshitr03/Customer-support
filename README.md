@@ -123,14 +123,13 @@ system name and no judge score, row order shuffled (seeded):
 - `results/human_scoring_rubric.md` — send alongside the blind sheet.
 
 To add a human comparison point: send the blind sheet + rubric to a rater,
-have them fill `human_overall` (1–5), save the result as
+have them fill `human_overall` (1–5), save as
 `data/golden/human_scores.csv`, then rerun `python scripts/run_demo.py`
-(or `python -m eval.human_agreement` directly). It joins the filled sheet
-back against the key and `reply_rows.csv`, validates every item joins
-exactly once, and writes `results/judge_human_agreement.json` — Cohen's
-kappa, Spearman, and per-system breakdowns (the stricter read: pooled
-agreement across all three systems is inflated by their own quality
-differences, not just rater/judge agreement).
+(or `python -m eval.human_agreement`). It re-joins the key, validates
+every item joins exactly once, and writes
+`results/judge_human_agreement.json` — kappa, Spearman, and per-system
+breakdowns (the stricter read: pooled agreement is inflated by the
+systems' own quality differences, not just rater/judge agreement).
 
 ## Repo map
 
@@ -158,42 +157,30 @@ differences, not just rater/judge agreement).
 
 ## Honest caveats
 
+Full narrative for each of these: `report/REPORT.md` §5–6.
+
 - **Golden labels are AI-drafted, human-reviewed — not independent
-  hand-labeling.** Claude drafted every gold intent/escalation/reason
-  against a written rubric (never against the keyword prefill or any
-  model's own prediction); the author then reviewed all 200 rows across
-  two rounds — 13 annotated, 6 gold labels changed, including two
-  deliberate exceptions to the bug-escalation rubric (rows 43 and 913386).
-  Round 1 moved accuracy slightly *down* (0.790 → 0.785), the expected
-  direction for a real review. Round 2, done later while reading the
-  classifier's own errors, moved accuracy *up* (0.850 → 0.860) — both of
-  its corrections happened to match what the classifier had already
-  predicted, a real bias risk of reviewing labels via a model's mistakes,
-  disclosed in `report/REPORT.md` §6 rather than hidden. Full record:
-  `eval/golden_labeling_notes.md`. The rows most worth re-checking first:
-  the 102 where `gold_intent` differs from the keyword prefill (`pre_intent`)
-  and the 102 where `gold_escalate` is `True` — wherever gold disagrees
-  with the cheap mechanical baseline.
-- **The judge and the reply generator share a model family** (Gemini),
-  which can inflate agreement between "the model's own idea of a good
-  reply" and "the model's own judgment of a good reply."
-- **Retrieval covers all 5,400 history threads.** It was capped at 3,800
-  for the first runs by the free-tier embedding quota; growing it 42%
-  moved grounded reply quality by only ~0.02 on the judge's 1–5 scale —
-  retrieval size was not the binding constraint.
-- **The golden and reply-quality subsets are small** (`n_golden`,
-  `n_reply_subset` in `results/eval_results.json`'s metadata) — treat
-  point estimates cautiously; the bootstrap CIs in that file are the more
-  honest read.
-- **Judge/human agreement, on the full 120-pair sheet, is weaker than an
-  earlier small sample suggested — disclosed, not smoothed over.** The
-  blind-scoring sheet was widened from 40 pairs (one system per
-  spot-check message, rotated, ~13 per system) to 120 (all three systems
-  per message, ~40 per system) and fully scored. Binned kappa moved
-  0.342 [−0.074, 0.692] → **0.155 [−0.001, 0.305]**: the CI more than
-  halved, but the point estimate dropped — the signature of a real
-  small-sample overestimate being corrected, not a regression. Per
-  system: `grounded` 0.755 → 0.388 (still the clearest signal), `nearest`
-  0.304 → **−0.017** (essentially chance — the judge cannot tell a reply
-  copied for a different customer from a good one). Full numbers and the
-  concrete example: `report/REPORT.md` §4–5.
+  hand-labeling.** Claude drafted all 200 against a written rubric (never
+  against the keyword prefill or any model prediction); the author
+  reviewed every row across two rounds (13 annotated, 6 changed,
+  including two deliberate bug-escalation-rubric exceptions). Round 2 was
+  done while reading the classifier's own errors and moved accuracy *up*
+  — a real self-review bias, disclosed rather than hidden. Full record:
+  `eval/golden_labeling_notes.md`. Worth re-checking first: the 102 rows
+  where `gold_intent` differs from the keyword prefill (`pre_intent`), and
+  the 102 where `gold_escalate` is `True`.
+- **The judge and the reply generator share a model family** (Gemini) —
+  can inflate "the model's idea of a good reply" agreeing with "the
+  model's judgment of a good reply."
+- **Retrieval covers all 5,400 history threads**, capped at 3,800 for
+  early runs by the free-tier embed quota; growing it 42% moved grounded
+  quality by only ~0.02 — not the binding constraint.
+- **The golden and reply-quality subsets are small** — treat point
+  estimates cautiously; the bootstrap CIs in `results/eval_results.json`
+  are the more honest read.
+- **Judge/human agreement (n=120) is weaker than an earlier small sample
+  (n=40) suggested.** Binned kappa 0.342 [−0.074, 0.692] → **0.155
+  [−0.001, 0.305]** — CI more than halved, point estimate dropped: a
+  small-sample overestimate getting corrected, not a regression. `nearest`
+  collapsed to essentially chance (0.304 → **−0.017**) — the judge can't
+  tell a reply copied for a different customer from a good one.
