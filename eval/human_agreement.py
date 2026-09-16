@@ -3,7 +3,7 @@
 This module computes evidence of how well the LLM judge agrees with a
 human, from `data/golden/human_scores.csv`, the filled-in blind scoring
 sheet: a human rater filled in `human_overall` for
-`results/human_scoring_blind.csv`'s 40 (message, reply) pairs, which
+`results/human_scoring_blind.csv`'s 120 (message, reply) pairs, which
 carries neither the drafting system's name nor the judge's own score for
 that pair -- see `results/human_scoring_rubric.md` for the rubric they
 scored against. This module re-attaches that identity from

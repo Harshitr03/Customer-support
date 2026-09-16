@@ -99,6 +99,38 @@ def test_missing_human_scores_csv_is_handled_without_calling_human_agreement(tmp
     assert "human_scores.csv" in out
 
 
+def test_incomplete_human_scores_csv_is_handled_without_a_raw_traceback(tmp_path, monkeypatch, capsys):
+    """The file exists but scoring isn't finished yet (e.g. a human-scoring
+    sheet just widened from 40 to 120 pairs, and only 40 are filled in so
+    far): human_agreement.main() raises ValueError -- eval.human_agreement's
+    only failure mode, always a data problem in human_scores.csv itself,
+    never an unrelated bug -- and run_demo must print that message and move
+    on to stage 6, not crash with a raw traceback."""
+    calls = []
+    golden_dir = tmp_path / "golden"
+    golden_dir.mkdir()
+    (golden_dir / "human_scores.csv").write_text("pair_id\n1\n")  # exists, so stage 5 is attempted
+    _mock_all_stages(monkeypatch, calls, golden_dir)
+
+    def raise_incomplete():
+        calls.append("human_agreement")
+        raise ValueError(
+            "80 row(s) of data/golden/human_scores.csv have a blank "
+            "human_overall score -- fill in every row before computing agreement.")
+
+    monkeypatch.setattr(run_demo.human_agreement, "main", raise_incomplete)
+
+    code = run_demo.main([])
+
+    assert code == 0
+    assert calls == ["build_pool", "build_index", "build_golden_set", "run_eval",
+                      "human_agreement", "pipeline_handle"]
+    out = capsys.readouterr().out
+    assert "in progress" in out.lower()
+    assert "80 row(s)" in out
+    assert "Traceback" not in out
+
+
 def test_offline_missing_replay_entry_stops_cleanly_with_helpful_message(tmp_path, monkeypatch, capsys):
     calls = []
     golden_dir = tmp_path / "golden"

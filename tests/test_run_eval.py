@@ -194,21 +194,26 @@ def test_compute_escalation_variant_passes_expected_args(monkeypatch):
 # human scoring template rotation (ruling 7)
 # ---------------------------------------------------------------------------
 
-def test_human_scoring_template_rotates_systems():
+def test_human_scoring_template_includes_all_three_systems_per_message():
     spotcheck = pd.DataFrame({
-        "root_id": [1, 2, 3, 4],
-        "message": ["m1", "m2", "m3", "m4"],
+        "root_id": [1, 2],
+        "message": ["m1", "m2"],
     })
     reply_rows = pd.DataFrame([
         {"root_id": rid, "system": sys_, "reply": f"{sys_}-reply-{rid}",
          "reference": f"ref-{rid}", "overall": rid}
-        for rid in [1, 2, 3, 4] for sys_ in ["trivial", "nearest", "grounded"]
+        for rid in [1, 2] for sys_ in ["trivial", "nearest", "grounded"]
     ])
     tmpl = run_eval.build_human_scoring_template(spotcheck, reply_rows)
-    assert list(tmpl["system"]) == ["trivial", "nearest", "grounded", "trivial"]
-    assert list(tmpl["pair_id"]) == [1, 2, 3, 4]
-    assert list(tmpl["judge_overall"]) == [1, 2, 3, 4]
+    # 2 messages x 3 systems = 6 pairs, all three systems for EACH message
+    # (not one system per message in rotation).
+    assert len(tmpl) == 6
+    assert list(tmpl["system"]) == ["trivial", "nearest", "grounded"] * 2
+    assert list(tmpl["root_id"]) == [1, 1, 1, 2, 2, 2]
+    assert list(tmpl["pair_id"]) == [1, 2, 3, 4, 5, 6]
+    assert list(tmpl["judge_overall"]) == [1, 1, 1, 2, 2, 2]
     assert tmpl.loc[0, "reply"] == "trivial-reply-1"
+    assert set(tmpl[tmpl["root_id"] == 1]["system"]) == {"trivial", "nearest", "grounded"}
 
 
 def test_human_scoring_template_raises_on_missing_reply_row():
@@ -277,17 +282,20 @@ def test_committed_blind_sheet_is_actually_blank_not_a_filled_copy():
         "Do not commit a filled blind sheet: it overwrites a generated artifact "
         "and every eval run reverts it."
     )
-    # The sheet must still be the real 40-pair set, not an empty file that
-    # trivially satisfies the assertion above.
-    assert len(df) == 40
+    # The sheet must still be the real 120-pair set (40 spot-check messages
+    # x 3 systems), not an empty file that trivially satisfies the
+    # assertion above.
+    assert len(df) == 120
     assert "system" not in df.columns and "judge_overall" not in df.columns
 
 
-def test_build_blind_human_scoring_item_ids_are_h01_style_assigned_after_shuffle():
-    spotcheck, reply_rows = _make_spotcheck_and_reply_rows(n=6)
+def test_build_blind_human_scoring_item_ids_are_h001_style_assigned_after_shuffle():
+    # 2 messages x 3 systems = 6 pairs.
+    spotcheck, reply_rows = _make_spotcheck_and_reply_rows(n=2)
     blind_df, key_df = run_eval.build_blind_human_scoring(spotcheck, reply_rows)
-    assert list(blind_df["item_id"]) == ["h01", "h02", "h03", "h04", "h05", "h06"]
-    assert list(key_df["item_id"]) == ["h01", "h02", "h03", "h04", "h05", "h06"]
+    expected_ids = ["h001", "h002", "h003", "h004", "h005", "h006"]
+    assert list(blind_df["item_id"]) == expected_ids
+    assert list(key_df["item_id"]) == expected_ids
     # the shuffle really did reorder relative to the original pair_id 1..6
     # order (seed 42 on 6 items -- not literally 1,2,3,4,5,6 in that order)
     assert list(key_df["pair_id"]) != [1, 2, 3, 4, 5, 6]
@@ -315,13 +323,17 @@ def test_build_blind_human_scoring_is_deterministic_for_fixed_seed():
     pd.testing.assert_frame_equal(key1, key2)
 
 
-def test_build_blind_human_scoring_covers_all_40_spotcheck_pairs():
+def test_build_blind_human_scoring_covers_all_120_pairs_from_40_spotcheck_messages():
     spotcheck, reply_rows = _make_spotcheck_and_reply_rows(n=40)
     blind_df, key_df = run_eval.build_blind_human_scoring(spotcheck, reply_rows)
-    assert len(blind_df) == 40
-    assert len(key_df) == 40
-    assert set(key_df["item_id"]) == {f"h{i:02d}" for i in range(1, 41)}
+    assert len(blind_df) == 120
+    assert len(key_df) == 120
+    assert set(key_df["item_id"]) == {f"h{i:03d}" for i in range(1, 121)}
+    # each of the 40 root_ids appears, and appears exactly 3 times (once
+    # per system) -- coverage as well as no duplication or drift.
     assert set(key_df["root_id"]) == set(range(1, 41))
+    assert (key_df["root_id"].value_counts() == 3).all()
+    assert set(key_df[key_df["root_id"] == 1]["system"]) == {"trivial", "nearest", "grounded"}
 
 
 # ---------------------------------------------------------------------------
@@ -587,14 +599,14 @@ def test_main_full_run_writes_ruling7_outputs(tmp_path, monkeypatch):
         assert col in rrows.columns
 
     hblind = pd.read_csv(tmp_path / "human_scoring_blind.csv")
-    assert len(hblind) == n_spotcheck
+    assert len(hblind) == n_spotcheck * 3  # all 3 systems per spot-check message
     for col in ("item_id", "message", "reply", "reference", "human_overall"):
         assert col in hblind.columns
     assert "system" not in hblind.columns
     assert "judge_overall" not in hblind.columns
 
     hkey = pd.read_csv(tmp_path / "human_scoring_key.csv")
-    assert len(hkey) == n_spotcheck
+    assert len(hkey) == n_spotcheck * 3
     for col in ("item_id", "pair_id", "root_id", "system"):
         assert col in hkey.columns
     assert set(hkey["item_id"]) == set(hblind["item_id"])

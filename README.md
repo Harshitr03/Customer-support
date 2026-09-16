@@ -115,8 +115,9 @@ local working cache of new `--live` calls, separate from the curated
 Blind by construction, enforced in code — the file a rater sees carries no
 system name and no judge score, row order shuffled (seeded):
 
-- `results/human_scoring_blind.csv` — send this. 40 pairs, `item_id`
-  (`h01`…`h40`) assigned after shuffling, `human_overall` blank.
+- `results/human_scoring_blind.csv` — send this. 120 pairs (40 spot-check
+  messages x all 3 systems, not a rotation), `item_id` (`h001`…`h120`)
+  assigned after shuffling, `human_overall` blank.
 - `results/human_scoring_key.csv` — **never send this.** It's the
   de-anonymizing key (`item_id` → `pair_id`, `root_id`, `system`).
 - `results/human_scoring_rubric.md` — send alongside the blind sheet.
@@ -184,5 +185,12 @@ differences, not just rater/judge agreement).
   `n_reply_subset` in `results/eval_results.json`'s metadata) — treat
   point estimates cautiously; the bootstrap CIs in that file are the more
   honest read.
-- **Judge/human agreement is absent, not favorable, until you add it** —
-  it's only computed once `data/golden/human_scores.csv` exists.
+- **Judge/human agreement is partial, not absent, and not favorable until
+  it's complete.** The blind-scoring sheet was recently widened from 40
+  pairs (one system per spot-check message, rotated) to 120 (all three
+  systems per message, for a full per-system comparison instead of ~13
+  pairs each). 40 of 120 are already scored — carried over from the
+  original round — 80 are pending. `results/judge_human_agreement.json`
+  and the numbers in `report/REPORT.md` still reflect the completed
+  40-pair round; `run_demo.py` reports the gap explicitly rather than
+  computing on a partial sheet.

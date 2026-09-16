@@ -193,9 +193,13 @@ def compute_escalation_variant(golden: pd.DataFrame, intents: list, confidences:
 
 
 def build_human_scoring_template(spotcheck: pd.DataFrame, reply_rows: pd.DataFrame) -> pd.DataFrame:
-    """The 40 in_spotcheck rows, one system per row in rotation
-    (trivial, nearest, grounded, trivial, ...), for a human to score
-    independently against judge_overall.
+    """All three systems' replies for every in_spotcheck row (40 rows x 3
+    systems = 120 pairs), for a human to score independently against
+    judge_overall. Was one system per row in rotation (40 pairs); widened
+    so every system gets a full human comparison instead of ~13 pairs
+    each, at zero API cost -- the replies were already drafted and judged
+    for the full 60-row reply-quality subset, this just shows more of what
+    already exists.
 
     This selection alone is NOT what gets sent to a human rater anymore
     -- it carries the system name and the judge's own score, either of
@@ -205,21 +209,23 @@ def build_human_scoring_template(spotcheck: pd.DataFrame, reply_rows: pd.DataFra
     own function (rather than inlined) so the deterministic pair-selection
     logic and the shuffle/blinding step are independently testable."""
     recs = []
-    for i, row in enumerate(spotcheck.itertuples()):
-        system = REPLY_SYSTEMS[i % len(REPLY_SYSTEMS)]
-        match = reply_rows[(reply_rows["root_id"] == row.root_id) & (reply_rows["system"] == system)]
-        if match.empty:
-            raise ValueError(f"no reply_rows entry for root_id={row.root_id} system={system}")
-        m = match.iloc[0]
-        recs.append({
-            "pair_id": i + 1,
-            "root_id": row.root_id,
-            "message": row.message,
-            "system": system,
-            "reply": m["reply"],
-            "reference": m["reference"],
-            "judge_overall": m["overall"],
-        })
+    pair_id = 0
+    for row in spotcheck.itertuples():
+        for system in REPLY_SYSTEMS:
+            pair_id += 1
+            match = reply_rows[(reply_rows["root_id"] == row.root_id) & (reply_rows["system"] == system)]
+            if match.empty:
+                raise ValueError(f"no reply_rows entry for root_id={row.root_id} system={system}")
+            m = match.iloc[0]
+            recs.append({
+                "pair_id": pair_id,
+                "root_id": row.root_id,
+                "message": row.message,
+                "system": system,
+                "reply": m["reply"],
+                "reference": m["reference"],
+                "judge_overall": m["overall"],
+            })
     return pd.DataFrame(recs)
 
 
@@ -258,10 +264,10 @@ not as an answer key the drafted reply has to match verbatim.
 def build_blind_human_scoring(spotcheck: pd.DataFrame, reply_rows: pd.DataFrame,
                                seed: int = HUMAN_SCORING_SHUFFLE_SEED) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Blind human scoring, enforced in code. build_human_scoring_template's
-    40 (root_id, system) pairs are shuffled (seeded, so this is
-    reproducible) and assigned item_ids AFTER the shuffle, so neither the
-    row order nor an item_id gives away which system drafted a reply.
-    Returns (blind_df, key_df):
+    (root_id, system) pairs (120 for the full 40-message spot-check x 3
+    systems) are shuffled (seeded, so this is reproducible) and assigned
+    item_ids AFTER the shuffle, so neither the row order nor an item_id
+    gives away which system drafted a reply. Returns (blind_df, key_df):
 
     - blind_df -- what actually gets sent to a human rater:
       item_id, message, reply, reference, human_overall (blank). No system
@@ -273,7 +279,9 @@ def build_blind_human_scoring(spotcheck: pd.DataFrame, reply_rows: pd.DataFrame,
     """
     pairs = build_human_scoring_template(spotcheck, reply_rows)
     shuffled = pairs.sample(frac=1, random_state=seed).reset_index(drop=True)
-    item_ids = [f"h{i + 1:02d}" for i in range(len(shuffled))]
+    # :03d, not :02d -- 40 spot-check messages x 3 systems can exceed 99
+    # pairs, and a fixed width keeps every item_id the same shape.
+    item_ids = [f"h{i + 1:03d}" for i in range(len(shuffled))]
 
     blind_df = pd.DataFrame({
         "item_id": item_ids,

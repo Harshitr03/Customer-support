@@ -81,7 +81,7 @@ customer tweet
   - **Reference:** Spotify's *actual* reply in that same held-out thread, which no system could have seen.
   - **Blind:** the judge never learns which system wrote a reply.
 
-**Does the judge agree with a human?** The author scores 40 reply pairs blind: no judge scores, no system names, rows shuffled, rotated across the three systems. I report binned and quadratic-weighted Cohen's kappa, Spearman correlation, and exact and within-one agreement.
+**Does the judge agree with a human?** The author scores reply pairs blind: no judge scores, no system names, rows shuffled. I report binned and quadratic-weighted Cohen's kappa, Spearman correlation, and exact and within-one agreement. The numbers in §4 are from the first completed round (40 pairs, one system per spot-check message, rotated); the sheet has since been widened to all 3 systems per message (120 pairs total, 40 scored so far) for a tighter per-system read, in progress at time of writing.
 
 ## 4. Results
 

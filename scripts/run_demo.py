@@ -55,7 +55,15 @@ def _banner(n: int) -> None:
 def _stage5_human_agreement():
     """Ruling 4.5: only run human_agreement.main() if the human scores file
     exists; otherwise print one line explaining why it was skipped, rather
-    than human_agreement's own multi-line "how to produce it" instructions."""
+    than human_agreement's own multi-line "how to produce it" instructions.
+
+    A ValueError here always means data/golden/human_scores.csv itself is
+    incomplete or malformed (blank rows, bad item_ids, out-of-range scores
+    -- see eval.human_agreement._validate_scores/join_human_scores, the
+    only places this module raises) -- never an unrelated bug, so it's
+    safe to catch broadly at this one call site and print the message
+    (already specific and actionable) instead of a raw traceback, matching
+    how OfflineModeError is handled for the other stages."""
     path = config.GOLDEN_DIR / "human_scores.csv"
     if not path.exists():
         print(
@@ -63,7 +71,11 @@ def _stage5_human_agreement():
             "-- skipping; see README's human-agreement workflow."
         )
         return None
-    return human_agreement.main()
+    try:
+        return human_agreement.main()
+    except ValueError as exc:
+        print(f"Human scoring in progress, not yet complete -- skipping: {exc}")
+        return None
 
 
 def _print_live_example(out: dict) -> None:
