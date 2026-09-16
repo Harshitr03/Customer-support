@@ -10,34 +10,34 @@ Full writeup and the decisions behind this design: [`report/REPORT.md`](report/R
 ## Quickstart
 
 Reproduces `report/REPORT.md`'s numbers, no API key, no dataset download,
-under a minute after `pip install`:
+under a minute after `pip install`. Requires **Python 3.11+**.
 
 ```bash
+git clone https://github.com/Harshitr03/Customer-support.git
+cd Customer-support
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 python scripts/run_demo.py
 ```
 
-That's it — every LLM/embedding call is replayed from the committed cache
-at `data/llm_cache/`, so the printed numbers are exactly the ones in the
-report. Everything below is detail on top of this.
+Every LLM/embedding call is replayed from the committed cache at
+`data/llm_cache/`, so the classification / reply-quality / escalation
+tables **printed to your terminal** are exactly the numbers in the report
+— also written to `results/eval_results.json` for programmatic reading.
+Everything below is detail on top of this.
 
 ```bash
 pytest -q          # unit tests, no network
 ```
 
-## Setup
-
-Requires Python 3.11+.
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env           # only needed for --live, see below
-```
+## Setup notes
 
 `pyproject.toml` pins the tested dependency bounds. For an exact,
-fully-pinned environment: `pip install -r requirements.lock` instead.
+fully-pinned environment, use `pip install -r requirements.lock` instead
+of the `pip install -e ".[dev]"` line above.
+
+For `--live` (optional, see "Recompute live" below): `cp .env.example .env`
+and add your `GEMINI_API_KEY`.
 
 **Dataset — not needed for the quickstart above.** `data/interim/` (parsed
 thread pools), `data/kb/` (retrieval index), and `data/golden/` (golden
