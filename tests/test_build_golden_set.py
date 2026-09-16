@@ -144,7 +144,13 @@ def test_docs_do_not_overstate_the_author_review():
 
 def test_readme_names_the_rows_most_likely_to_be_mislabeled():
     """The README must point a reader at the rows where the gold label disagrees
-    with the cheap keyword baseline -- the ones most worth re-checking."""
+    with the cheap keyword baseline -- the ones most worth re-checking. The
+    disagreement count is derived from the committed golden set, not
+    hardcoded, so this doesn't go stale the next time a gold label changes."""
     readme = _read("README.md")
+    golden = pd.read_csv(config.GOLDEN_DIR / "golden_eval.csv")
+    n_intent_diff = int((golden["gold_intent"] != golden["pre_intent"]).sum())
     assert "gold_escalate" in readme and "pre_intent" in readme
-    assert "101" in readme, "README no longer names the disagreement counts"
+    assert str(n_intent_diff) in readme, (
+        f"README no longer names the current disagreement count ({n_intent_diff})"
+    )

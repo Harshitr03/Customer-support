@@ -69,16 +69,20 @@
 
 ## Labeling results
 
-- Gold intent differs from the keyword prefill (`pre_intent`) on **101 of
-  200** rows.
-- Gold escalate rate: **101 of 200** rows (50.5%). The 2026-09-12 rubric change
-  flipped all 37 `technical_bug` rows to escalate (65 of 200 before that), and the
-  author's review then set one bug row back to auto-handle (see the exception below).
+- Gold intent differs from the keyword prefill (`pre_intent`) on **102 of
+  200** rows (101 after round 1 of the author review, +1 from round 2 below).
+- Gold escalate rate: **102 of 200** rows (51.0%). The 2026-09-12 rubric change
+  flipped all 37 `technical_bug` rows present at the time to escalate (65 of 200
+  before that), and the author's review then set one bug row (43) back to
+  auto-handle (see the exception below). Round 2 of the review (below) added a
+  38th `technical_bug` row (913386) by relabeling it from `other`, and the
+  author kept it auto-handle too, as a second deliberate exception -- so gold
+  now holds 38 `technical_bug` rows, 36 escalating and 2 exceptions.
   Escalation now applies to every `technical_bug`, `account_access`,
   `billing_subscription`, and `cancellation_refund` row plus a few `other`
   rows (open DM follow-ups); no `content_catalog` or `feature_complaint` row
   escalates.
-- Gold escalation differs from the rule prefill (`pre_escalate`) on **65 of
+- Gold escalation differs from the rule prefill (`pre_escalate`) on **66 of
   200** rows. The prefill applies the escalation rules to the *keyword* intent
   at assumed full confidence, so this gap mixes keyword-intent error with
   genuine policy error; `policy_only` in `results/eval_results.json` measures
@@ -89,19 +93,22 @@
 
   | intent | count |
   |---|---|
-  | feature_complaint | 46 |
-  | technical_bug | 37 |
-  | billing_subscription | 31 |
-  | other | 28 |
+  | feature_complaint | 45 |
+  | technical_bug | 38 |
+  | billing_subscription | 32 |
+  | other | 27 |
   | account_access | 27 |
   | content_catalog | 22 |
   | cancellation_refund | 9 |
+
+  (post-round-2-review counts; see below)
 
 ## Author review
 
 The author reviewed all 200 rows before the reported evaluation run, working from a
 sheet that showed each drafted label and its reason with blank columns for
-disagreements (blank = agree). **11 rows were annotated and 4 gold labels changed:**
+disagreements (blank = agree), across two review rounds.
+**13 rows were annotated and 6 gold labels changed:**
 
 | row | change | author's reason |
 |---|---|---|
@@ -116,9 +123,25 @@ changing it (rows 1, 3, 12, 34, 36, 37 and a confirmation on row 50).
 **Row 43 is a deliberate exception to the bug-escalation rubric.** "Spotify is broken
 and annoying @115888 sort ittttttt" is a `technical_bug`, which the rubric says a human
 should take, but the author judged that content-free venting gives a human nothing to
-act on. Gold therefore holds 36 escalating bug rows and this one auto-handled row, and
-the rule policy scores a false escalation against it. Per-row human judgment overrides
-the blanket rule, and the exception is recorded rather than smoothed away.
+act on. Gold holds 38 `technical_bug` rows total, 36 escalating and 2 deliberate
+auto-handled exceptions (43 and, from round 2 below, 913386), and the rule policy
+scores a false escalation against each exception. Per-row human judgment overrides the
+blanket rule, and the exception is recorded rather than smoothed away.
+
+**Round 2 (2026-09-16), during a live code walkthrough with the classifier's error
+analysis on screen.** Reading the 30 messages the LLM classifier still got wrong after
+a taxonomy-definition fix (see `report/DECISION_LOG.md`), the author corrected 2 more
+gold labels:
+
+| row | change | author's reason |
+|---|---|---|
+| 861396 | `feature_complaint` -> **`billing_subscription`**, escalate no -> **yes** | student-discount/plan request; the original label was also inconsistent with two other golden rows on the same topic (980320, 1908670), both already `billing_subscription`/escalate |
+| 913386 | `other` -> **`technical_bug`**, escalate stays **no** | "finally able to play frank ocean again after 30 mysterious hours where spotify would not let me" literally describes a resolved 30-hour playback failure -- but it's past-tense and resolved, so a human has nothing to act on (same exception as row 43) |
+
+Both corrections happened to match what the LLM classifier had already predicted for
+those rows, so applying them moves reported intent accuracy up by 2/200 (a side effect
+of fixing the label, not of improving the model) -- disclosed here rather than folded
+silently into the headline number.
 
 The review made the headline numbers slightly worse (Gemini intent accuracy 0.790 ->
 0.785, escalation precision 0.873 -> 0.864), which is the expected direction for a real
