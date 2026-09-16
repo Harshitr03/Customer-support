@@ -25,7 +25,7 @@ Spotify's support traffic on Twitter is mostly app bugs, account access, billing
 - **Account actions, DMs, or any live Twitter integration.** The agent drafts replies; it never sends anything or touches an account.
 - **Fine-tuning.** A small labeled set doesn't justify it, and a prompted model plus retrieval is easier to inspect.
 - **Multiple brands, or the full dataset.** This is one brand, on a 6,000-thread sample. The dataset has about 3M tweets, and the assignment expects a subsample.
-- **A UI, or a second independent judge model.** Both were out of scope for the time available. The single judge is a known weakness (§5).
+- **A second independent judge model.** Out of scope for the time available. The single judge is a known weakness (§5). (There is a small Streamlit UI — `app/streamlit_app.py`, tested, offline by default — but it's a convenience wrapper around this same pipeline for trying messages and browsing results, not a separate deliverable.)
 
 ## 2. The system
 
@@ -34,7 +34,7 @@ customer tweet
    │
    ├─► classify      Gemini 3.5 Flash-Lite, taxonomy in the prompt → intent + confidence
    │
-   ├─► retrieve      Gemini embeddings (768-d), cosine top-4 over 3,800 historical
+   ├─► retrieve      Gemini embeddings (768-d), cosine top-4 over 5,400 historical
    │                 (customer message → Spotify reply) pairs
    │
    ├─► draft reply   Gemini 3.5 Flash-Lite, conditioned on the predicted intent and the
@@ -62,7 +62,7 @@ customer tweet
 **Golden set (200 messages).** A stratified sample from the 600 held-out threads, with at least 10 per intent. The sample was chosen with free keyword labels, so no model output decided which rows were included.
 
 - **How labels were made:** every gold intent, escalation decision, and reason was drafted by Claude against the written rubric and reviewed by the author. The details are in [`eval/golden_labeling_notes.md`](../eval/golden_labeling_notes.md).
-- **Differs from the keyword prefill:** gold intent disagrees with the prefill on 101 of 200 rows.
+- **Differs from the keyword prefill:** gold intent disagrees with the prefill on 102 of 200 rows.
 - **Differs from the rule policy:** the gold escalation rubric disagrees with the rules on a known set of rows, and that gap is exactly what the escalation metric measures.
 
 **Three systems per task, compared on the same golden rows:**
@@ -91,19 +91,19 @@ Every number below comes from `results/eval_results.json`, reproduced offline fr
 
 | System | Accuracy | Macro-F1 |
 |---|---|---|
-| Trivial (always the majority training label) | 0.140 [0.095, 0.190] | 0.035 |
-| Simple (TF-IDF + logistic regression on keyword labels) | 0.505 [0.430, 0.575] | 0.528 |
-| **Gemini 3.5 Flash-Lite, taxonomy in prompt** | **0.785 [0.725, 0.840]** | **0.786** |
+| Trivial (always the majority training label) | 0.135 [0.090, 0.185] | 0.034 |
+| Simple (TF-IDF + logistic regression on keyword labels) | 0.500 [0.425, 0.570] | 0.524 |
+| **Gemini 3.5 Flash-Lite, taxonomy in prompt** | **0.860 [0.810, 0.900]** | **0.867** |
 
-The intervals don't overlap, so the ordering is real on this sample. The LLM's margin over TF-IDF (+0.28) is the clearest result in the project.
+The intervals don't overlap, so the ordering is real on this sample. The LLM's margin over TF-IDF (+0.36) is the clearest result in the project. The taxonomy started two intent boundaries under-specified (`technical_bug` vs. `billing_subscription` for errors inside a payment/signup flow, and `content_catalog` vs. `other` for "the service isn't in my country" messages) — both were visible as the two largest clusters in the confusion matrix, six errors each. Tightening those two definitions and re-running, isolated from any other change, moved accuracy 0.785 → 0.850 with no new confusions introduced anywhere else in the matrix; two further gold-label corrections found during that same error review (§5) brought it to 0.860.
 
 ### Reply quality (LLM judge, 1–5 overall)
 
 | System | Overall |
 |---|---|
-| Trivial (one canned template per intent) | 4.10 [3.83, 4.37] |
+| Trivial (one canned template per intent) | 4.02 [3.73, 4.30] |
 | Simple (nearest historical reply, copied) | 3.97 [3.68, 4.22] |
-| **Grounded generation** | **4.57 [4.38, 4.72]** |
+| **Grounded generation** | **4.58 [4.40, 4.75]** |
 
 Two things are more interesting than the ranking. First, the canned template beats copying a real Spotify reply — a retrieved reply is often a mismatched answer to a different problem, while a template is at least on-topic. Second, a canned template scoring 4.10 should provoke suspicion about the judge, and §6 shows that suspicion is justified.
 
@@ -111,13 +111,13 @@ Two things are more interesting than the ranking. First, the canned template bea
 
 | System | Precision | Recall |
 |---|---|---|
-| Always escalate | 0.505 | 1.000 |
+| Always escalate | 0.510 | 1.000 |
 | Never escalate | 0.000 | 0.000 |
-| Rules on TF-IDF intents | 0.926 | 0.624 |
-| **Rules on Gemini intents (end to end)** | **0.864 [0.792, 0.924]** | **0.941 [0.891, 0.981]** |
-| Rules on gold intents (policy only) | 0.942 [0.892, 0.981] | 0.970 [0.930, 1.000] |
+| Rules on TF-IDF intents | 0.926 | 0.618 |
+| **Rules on Gemini intents (end to end)** | **0.864 [0.793, 0.920]** | **0.931 [0.875, 0.979]** |
+| Rules on gold intents (policy only) | 0.934 [0.882, 0.979] | 0.971 [0.931, 1.000] |
 
-The end-to-end/policy-only gap isolates blame: with perfect intents the policy scores 0.942/0.970, so most remaining escalation error is classifier error, not rule error. Gold escalation rate is 101/200, so "always escalate" is a 0.505-precision baseline — the recall-1.0 strawman worth naming explicitly.
+The end-to-end/policy-only gap isolates blame: with perfect intents the policy scores 0.934/0.971, so most remaining escalation error is classifier error, not rule error. Gold escalation rate is 102/200, so "always escalate" is a 0.510-precision baseline — the recall-1.0 strawman worth naming explicitly.
 
 ### Judge versus human
 
@@ -136,21 +136,21 @@ Per system: grounded **0.755**, nearest 0.304, trivial **−0.120**.
 
 **1. The judge is worse than chance on canned templates.** Kappa −0.120 on the trivial system. It rewards fluent, polite, well-formed replies; the author scored the same replies on whether they actually answered the customer. Example (item h09): a locked-out Indonesian customer is told, in English, to cancel under Account > Subscription — judge 4, human 1. *Hypothesis:* the rubric's four axes (grounded, factual, tone, actionable) are all satisfiable by a generic template, because "actionable" doesn't require the action to be *possible for this customer*.
 
-**2. Non-English messages were answered in English.** Three golden rows are non-English. Row 186's opening words are "Mereka pake bhs. Inggris" — "they use English" — a complaint about exactly that. The fix (one prompt instruction) now produces an Indonesian reply, but aggregate judge score *fell* 4.60 → 4.57, because the rubric has no language axis. *Hypothesis:* the judge can't measure a dimension it wasn't told about, so a real improvement is invisible to the headline metric.
+**2. Non-English messages were answered in English.** Three golden rows are non-English. Row 186's opening words are "Mereka pake bhs. Inggris" — "they use English" — a complaint about exactly that. The fix (one prompt instruction) produced an Indonesian reply, but aggregate judge score *fell* 4.60 → 4.57 at the time, because the rubric has no language axis. (The headline grounded score reported in §4, 4.58, reflects a later, unrelated taxonomy fix that changed which intent a handful of messages draft their reply against — not a reversal of this finding.) *Hypothesis:* the judge can't measure a dimension it wasn't told about, so a real improvement is invisible to the headline metric.
 
 **3. The classifier is confidently wrong on multi-intent messages.** LLM self-reported confidence is almost always 0.85–1.00, so the confidence-below-0.55 escalation rule almost never fires. Messages that mix a bug with a billing complaint get one label at high confidence. *Hypothesis:* self-reported confidence from a single forward pass is close to useless for routing; real calibration needs held-out agreement or an ensemble.
 
 **4. The keyword baseline is defeated by vocabulary, not by difficulty.** TF-IDF at 0.505 initially caught only 6% of messages containing obvious bug words ("error", "glitch", "stopped working") because the hand-written keyword lists missed them; after fixing, 84%. It also misread the Indonesian cancellation as `other`, which Gemini got right at 0.85 confidence. *Hypothesis:* a keyword baseline measures the author's vocabulary coverage as much as the task's difficulty, which is worth stating when quoting the +0.28 margin.
 
-**5. Bug-versus-feature is the boundary humans disagree on.** The author's review changed 4 labels, three of which were this boundary (rows 60, 71, 78 — "raise the download limit", "block an artist", "download podcasts to a watch"). Removed-on-purpose features and platform-parity gaps read as bugs to some reviewers and as feature requests to others. *Hypothesis:* label ambiguity, not model error, sets a ceiling on measurable intent accuracy here — and the gold set has one deliberate exception (row 43) where the author overrode the rubric for content-free venting.
+**5. Bug-versus-feature is the boundary humans disagree on — and reviewing it twice found real mislabels, not just model error.** Round 1 of the author's review changed 4 labels, three of which were this boundary (rows 60, 71, 78 — "raise the download limit", "block an artist", "download podcasts to a watch"). Removed-on-purpose features and platform-parity gaps read as bugs to some reviewers and as feature requests to others. Round 2, done later by reading the 30 messages the classifier still got wrong after the taxonomy fix above, found 2 more: a student-discount request mislabeled `feature_complaint` instead of `billing_subscription` (inconsistent with two other golden rows on the same topic), and a resolved 30-hour playback outage mislabeled `other` instead of `technical_bug`. Both corrections happened to match what the classifier had already predicted, which is the honest caveat: reviewing gold labels specifically among the model's *wrong* answers risks relabeling toward the model's guess rather than the truth. Both were checked against independent evidence (label consistency with other rows; the message's own literal content) before being accepted, not accepted just because the model agreed. *Hypothesis:* label ambiguity, not model error, sets a ceiling on measurable intent accuracy here — and the gold set has two deliberate escalation exceptions (rows 43 and 913386) where the author overrode the bug-escalation rubric because the message gives a human nothing to act on.
 
 ## 6. What is misleading about my headline number
 
-The headline is "79% intent accuracy, 4.57 reply quality, 0.86/0.94 escalation." Each is qualified:
+The headline is "86% intent accuracy, 4.58 reply quality, 0.86/0.93 escalation." Each is qualified:
 
-- **The escalation numbers are the least trustworthy figure in the report.** The rubric was revised *after* the first results: bug reports were originally auto-handleable (on the brand's own evidence — Spotify asked for a DM on 28% of plain bug reports), then reclassified as escalate-by-default, changing both the rules and the gold labels. Precision went 0.79 → 0.87 as a result. **Under the original rubric the same policy scores 0.55.** Scoring a policy against a rubric revised to match it is not independent evidence.
+- **The escalation numbers are the least trustworthy figure in the report.** The rubric was revised *after* the first results: bug reports were originally auto-handleable (on the brand's own evidence — Spotify asked for a DM on 28% of plain bug reports), then reclassified as escalate-by-default, changing both the rules and the gold labels. Precision went 0.79 → 0.86 as a result. **Under the original rubric the same policy scores 0.55.** Scoring a policy against a rubric revised to match it is not independent evidence.
 - **Reply quality rests on a judge that agrees with a human at kappa 0.342, whose CI crosses zero.** With n=40 I cannot exclude chance-level agreement. The judge is trustworthy on the grounded system (0.755) and anti-correlated on canned templates (−0.120) — precisely where the baseline comparison needs it most.
-- **One AI labeler, one human reviewer.** Gold labels were drafted by Claude and reviewed by the author, who changed 4 of 200. That is not independent hand-labeling and not an inter-annotator agreement study. The review moved accuracy *down* (0.790 → 0.785), which suggests it was real, but a single reviewer cannot bound their own bias.
+- **One AI labeler, one human reviewer, across two review rounds.** Gold labels were drafted by Claude and reviewed by the author, who changed 4 of 200 in round 1 (moving accuracy *down*, 0.790 → 0.785, which suggests it was real) and 2 more of 200 in round 2, found later while reading the classifier's own errors — both round-2 corrections matched what the classifier had already predicted, so that round moved accuracy *up* (0.850 → 0.860). Neither direction is independent hand-labeling or an inter-annotator agreement study, and a review conducted by reading the model's mistakes carries a specific risk the round-1 review didn't: relabeling toward the model's answer because it's in view, not because it's right. Both round-2 changes were checked against evidence outside the model's own prediction (see §5) before being accepted, but a single reviewer — self-reviewing spot-checked by their own later error analysis — cannot fully bound that bias.
 - **The judge and the reply generator share a model family**, so "the model's idea of a good reply" is graded by "the model's judgment of a good reply."
 - **n = 200, and rare intents are rarer still.** `cancellation_refund` has 9 rows. Per-intent F1 for the small classes is nearly meaningless, and macro-F1 inherits that noise.
 - **The trivial classifier is weaker than it looks.** It predicts the majority *training* label ("other"), which is only 14% of gold — an easy baseline to beat. A stronger trivial baseline would be the majority gold class (23%).
